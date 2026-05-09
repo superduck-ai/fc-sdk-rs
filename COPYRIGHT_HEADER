@@ -1,0 +1,5 @@
+Copyright 2026 firecracker-rs-sdk2 contributors
+SPDX-License-Identifier: Apache-2.0
+
+This file is part of a from-scratch Rust implementation of the Firecracker Go
+SDK layout and behavior.

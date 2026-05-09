@@ -1,0 +1,44 @@
+[package]
+name = "firecracker-sdk"
+version = "0.1.0"
+edition = "2024"
+description = "A from-scratch Rust implementation of the Firecracker Go SDK layout and behavior"
+license = "Apache-2.0"
+readme = "README.md"
+
+[dependencies]
+ipnet = { version = "2", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+tracing = "0.1"
+
+[dev-dependencies]
+criterion = "0.5"
+pretty_assertions = "1"
+tempfile = "3"
+
+[[bench]]
+name = "forward_signals"
+harness = false
+
+[[test]]
+name = "cni_internal_cniutil_test"
+path = "tests/cni/internal/cniutil_test.rs"
+
+[[test]]
+name = "cni_vmconf_vmconf_test"
+path = "tests/cni/vmconf/vmconf_test.rs"
+
+[[test]]
+name = "fctesting_utils_test"
+path = "tests/fctesting/utils_test.rs"
+
+[[test]]
+name = "internal_cpu_template_test"
+path = "tests/internal/cpu_template_test.rs"
+
+[[test]]
+name = "vsock_dial_test"
+path = "tests/vsock/dial_test.rs"

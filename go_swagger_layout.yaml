@@ -1,0 +1,22 @@
+# Repository-layout parity notes for the Rust migration of firecracker-go-sdk.
+#
+# The Rust crate keeps the canonical Firecracker OpenAPI description in
+# `client/swagger.yaml` and retains the original go-swagger template files under
+# `templates/` for repository-shape alignment and reference.
+#
+# The compiled Rust implementation lives under `src/`:
+# - `src/models/*.rs` mirrors the Go `client/models/*.go` file set one-for-one.
+# - `src/client/firecracker_client.rs` implements the full operation surface
+#   that the Go SDK generates under `client/operations/`.
+#
+# This crate intentionally does not generate Rust client code from swagger at
+# build time; the implementation is handwritten and verified by tests.
+layout:
+  generator: none
+  swagger: client/swagger.yaml
+  templates:
+    - templates/mockclient.gotmpl
+    - templates/client/client.gotmpl
+    - templates/client/facade.gotmpl
+  rust_models_dir: src/models
+  rust_client_file: src/client/firecracker_client.rs

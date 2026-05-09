@@ -1,0 +1,10 @@
+firecracker-rs-sdk2
+Copyright 2026 contributors
+
+This repository provides a from-scratch Rust implementation of the Firecracker
+Go SDK layout and behavior.
+
+The crate interacts with the public Firecracker API and uses the Firecracker Go
+SDK as a behavior and repository-shape reference during migration work. Rust
+source files in this repository are intended to be authored directly for this
+crate rather than copied from sibling Rust SDK repositories.
