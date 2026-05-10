@@ -7,9 +7,9 @@ use std::time::{Duration, Instant};
 
 use firecracker_sdk::fctesting::MockClient;
 use firecracker_sdk::{
-    AsyncResultExt, Config, FifoLogWriter, Handler, HandlerList, MMDSVersion, Machine,
-    MachineConfiguration, NetworkInterface, NoopClient, StaticNetworkConfiguration, VsockDevice,
-    add_vsocks_handler, attach_drives_handler, bootstrap_logging_handler, config_mmds_handler,
+    Config, FifoLogWriter, Handler, HandlerList, MMDSVersion, Machine, MachineConfiguration,
+    NetworkInterface, NoopClient, StaticNetworkConfiguration, VsockDevice, add_vsocks_handler,
+    attach_drives_handler, bootstrap_logging_handler, config_mmds_handler,
     create_boot_source_handler, create_log_files_handler, create_machine_handler,
     create_network_interfaces_handler, new_set_metadata_handler,
 };
@@ -216,8 +216,8 @@ fn TestHandlerListAppendAfter() {
     }
 }
 
-#[test]
-fn TestHandlerListRun() {
+#[tokio::test(flavor = "current_thread")]
+async fn TestHandlerListRun() {
     let count = Arc::new(Mutex::new(0));
     let count_foo = count.clone();
     let count_bar = count.clone();
@@ -244,17 +244,47 @@ fn TestHandlerListRun() {
     ]);
 
     let mut machine = Machine::new_with_client(Config::default(), Box::new(NoopClient)).unwrap();
-    let error = list.run(&mut machine).unwrap_err();
+    let error = list.run(&mut machine).await.unwrap_err();
     assert_eq!(format!("process error: {baz_err}"), error.to_string());
     assert_eq!(11, *count.lock().unwrap());
 
     let list = list.remove("baz");
-    list.run(&mut machine).unwrap();
+    list.run(&mut machine).await.unwrap();
     assert_eq!(2200, *count.lock().unwrap());
 }
 
-#[test]
-fn TestHandlers() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_handler_list_run_awaits_async_handlers_in_order() {
+    let order = Arc::new(Mutex::new(Vec::new()));
+    let first_order = Arc::clone(&order);
+    let second_order = Arc::clone(&order);
+
+    let list = HandlerList::default().append([
+        Handler::new_async("first", move |_machine| {
+            let order = Arc::clone(&first_order);
+            Box::pin(async move {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+                order.lock().unwrap().push("first".to_string());
+                Ok(())
+            })
+        }),
+        Handler::new_async("second", move |_machine| {
+            let order = Arc::clone(&second_order);
+            Box::pin(async move {
+                order.lock().unwrap().push("second".to_string());
+                Ok(())
+            })
+        }),
+    ]);
+
+    let mut machine = Machine::new_with_client(Config::default(), Box::new(NoopClient)).unwrap();
+    list.run(&mut machine).await.unwrap();
+
+    assert_eq!(vec!["first".to_string(), "second".to_string()], *order.lock().unwrap());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn TestHandlers() {
     let called = Arc::new(Mutex::new(String::new()));
     let metadata = serde_json::json!({ "foo": "bar", "baz": "qux" });
 
@@ -471,13 +501,13 @@ fn TestHandlers() {
     for (expected_name, handler, config, client) in cases {
         *called.lock().unwrap() = String::new();
         let mut machine = Machine::new_with_client(config, Box::new(client)).unwrap();
-        (handler.func)(&mut machine).unwrap();
+        (handler.func)(&mut machine).await.unwrap();
         assert_eq!(expected_name, called.lock().unwrap().as_str());
     }
 }
 
-#[test]
-fn test_create_log_files_handler_creates_and_cleans_up_fifo_paths() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_create_log_files_handler_creates_and_cleans_up_fifo_paths() {
     let temp_dir = tempfile::tempdir().unwrap();
     let log_fifo = temp_dir.path().join("firecracker.log");
     let metrics_file = temp_dir.path().join("firecracker.metrics");
@@ -492,19 +522,19 @@ fn test_create_log_files_handler_creates_and_cleans_up_fifo_paths() {
     )
     .unwrap();
 
-    (create_log_files_handler().func)(&mut machine).unwrap();
+    (create_log_files_handler().func)(&mut machine).await.unwrap();
 
     assert!(std::fs::metadata(&log_fifo).unwrap().file_type().is_fifo());
     assert!(std::fs::metadata(&metrics_file).unwrap().is_file());
 
-    machine.wait().unwrap();
+    machine.wait().await.unwrap();
 
     assert!(!log_fifo.exists());
     assert!(metrics_file.exists());
 }
 
-#[test]
-fn test_create_log_files_handler_captures_fifo_log_to_writer() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_create_log_files_handler_captures_fifo_log_to_writer() {
     let temp_dir = tempfile::tempdir().unwrap();
     let log_fifo = temp_dir.path().join("firecracker.log");
     let captured_log = temp_dir.path().join("captured.log");
@@ -526,7 +556,7 @@ fn test_create_log_files_handler_captures_fifo_log_to_writer() {
     )
     .unwrap();
 
-    (create_log_files_handler().func)(&mut machine).unwrap();
+    (create_log_files_handler().func)(&mut machine).await.unwrap();
 
     let mut fifo_writer = std::fs::OpenOptions::new()
         .write(true)
@@ -550,5 +580,5 @@ fn test_create_log_files_handler_captures_fifo_log_to_writer() {
     }
 
     machine.signal_exit();
-    machine.wait().unwrap();
+    machine.wait().await.unwrap();
 }

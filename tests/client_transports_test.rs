@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 
+use std::future::Future;
 use std::io::{Read, Write};
 use std::os::unix::net::UnixListener;
 use std::sync::{LazyLock, Mutex};
@@ -15,6 +16,7 @@ use firecracker_sdk::{
     Vm, VsockModel, new_unix_socket_transport,
 };
 use serde_json::{Value, json};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
@@ -100,6 +102,56 @@ fn split_http_request(request: &str) -> (&str, &str) {
     request.split_once("\r\n\r\n").unwrap()
 }
 
+async fn read_http_request_async(
+    stream: &mut tokio::net::UnixStream,
+) -> std::io::Result<String> {
+    let mut request = Vec::new();
+    let delimiter = b"\r\n\r\n";
+    let header_end = loop {
+        let mut chunk = [0u8; 256];
+        let read = stream.read(&mut chunk).await?;
+        if read == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "unexpected EOF while reading HTTP request headers",
+            ));
+        }
+
+        request.extend_from_slice(&chunk[..read]);
+        if let Some(position) = request
+            .windows(delimiter.len())
+            .position(|window| window == delimiter)
+        {
+            break position;
+        }
+    };
+
+    let content_length = String::from_utf8_lossy(&request[..header_end])
+        .lines()
+        .find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("content-length")
+                .then(|| value.trim().parse::<usize>().ok())
+                .flatten()
+        })
+        .unwrap_or_default();
+
+    let body_start = header_end + delimiter.len();
+    while request.len() < body_start + content_length {
+        let mut chunk = vec![0u8; body_start + content_length - request.len()];
+        let read = stream.read(&mut chunk).await?;
+        if read == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "unexpected EOF while reading HTTP request body",
+            ));
+        }
+        request.extend_from_slice(&chunk[..read]);
+    }
+
+    Ok(String::from_utf8(request).unwrap())
+}
+
 fn run_single_request<T, F, G>(response: Vec<u8>, assert_request: F, client_call: G) -> T
 where
     F: FnOnce(String) + Send + 'static,
@@ -119,6 +171,33 @@ where
     let client = Client::new(socket_path.display().to_string());
     let result = client_call(&client);
     handle.join().unwrap();
+    result
+}
+
+async fn run_single_request_async<T, F, G, Fut>(
+    response: Vec<u8>,
+    assert_request: F,
+    client_call: G,
+) -> T
+where
+    F: FnOnce(String) + Send + 'static,
+    G: FnOnce(Client) -> Fut,
+    Fut: Future<Output = T>,
+{
+    let temp_dir = tempfile::tempdir().unwrap();
+    let socket_path = temp_dir.path().join("transport-single-request-async.sock");
+    let listener = tokio::net::UnixListener::bind(&socket_path).unwrap();
+
+    let handle = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let request = read_http_request_async(&mut stream).await.unwrap();
+        assert_request(request);
+        stream.write_all(&response).await.unwrap();
+    });
+
+    let client = Client::new(socket_path.display().to_string());
+    let result = client_call(client).await;
+    handle.await.unwrap();
     result
 }
 
@@ -146,6 +225,34 @@ fn test_client_raw_request_uses_unix_socket() {
         .unwrap();
 
     handle.join().unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn test_client_raw_request_uses_unix_socket_async_runtime() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let socket_path = temp_dir.path().join("transport-async.sock");
+    let listener = tokio::net::UnixListener::bind(&socket_path).unwrap();
+
+    let handle = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let request = read_http_request_async(&mut stream).await.unwrap();
+        assert!(request.starts_with("PUT /test-operation HTTP/1.1\r\n"));
+        assert!(request.contains("Content-Type: application/json\r\n"));
+        assert!(request.ends_with("\r\n\r\n{}"));
+
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+            .await
+            .unwrap();
+    });
+
+    let client = Client::new(socket_path.display().to_string());
+    client
+        .raw_json_request("PUT", "/test-operation", &serde_json::json!({}))
+        .await
+        .unwrap();
+
+    handle.await.unwrap();
 }
 
 #[test]
@@ -201,6 +308,36 @@ fn test_transport_returns_timed_out_for_slow_response() {
     ));
 
     handle.join().unwrap();
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn test_transport_returns_timed_out_for_slow_response_async_runtime() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let socket_path = temp_dir.path().join("transport-timeout-async.sock");
+    let listener = tokio::net::UnixListener::bind(&socket_path).unwrap();
+
+    let handle = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let request = read_http_request_async(&mut stream).await.unwrap();
+        assert!(request.starts_with("GET /slow HTTP/1.1\r\n"));
+
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        let _ = stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+            .await;
+    });
+
+    let transport = new_unix_socket_transport(
+        socket_path.display().to_string(),
+        Duration::from_millis(100),
+    );
+    let error = transport.raw_request("GET", "/slow", None).await.unwrap_err();
+    assert!(matches!(
+        error,
+        Error::Io(ref error) if error.kind() == std::io::ErrorKind::TimedOut
+    ));
+
+    handle.await.unwrap();
 }
 
 #[test]
@@ -573,6 +710,25 @@ fn test_client_direct_methods_cover_write_routes_and_payloads() {
                 .unwrap();
         },
     );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn test_client_direct_methods_cover_async_await_callers() {
+    run_single_request_async(
+        b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n".to_vec(),
+        |request| {
+            let (headers, body) = split_http_request(&request);
+            assert!(headers.starts_with("PATCH /vm HTTP/1.1\r\n"));
+            assert_eq!(
+                json!({"state": "Paused"}),
+                serde_json::from_str::<Value>(body).unwrap()
+            );
+        },
+        |client| async move {
+            client.patch_vm(&Vm::paused()).await.unwrap();
+        },
+    )
+    .await;
 }
 
 #[test]

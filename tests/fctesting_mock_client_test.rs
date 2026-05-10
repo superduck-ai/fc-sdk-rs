@@ -1,11 +1,11 @@
 use firecracker_sdk::fctesting::MockClient;
 use firecracker_sdk::{
-    AsyncResultExt, ClientOps, EntropyDevice, MachineConfiguration, RateLimiter, TokenBucket,
+    ClientOps, EntropyDevice, MachineConfiguration, RateLimiter, TokenBucket,
 };
 use serde_json::json;
 
-#[test]
-fn test_mock_client_supports_extended_configuration_hooks() {
+#[tokio::test(flavor = "current_thread")]
+async fn test_mock_client_supports_extended_configuration_hooks() {
     let mut client = MockClient {
         patch_machine_configuration_fn: Some(Box::new(|cfg| {
             assert_eq!(Some(true), cfg.track_dirty_pages);
@@ -34,9 +34,11 @@ fn test_mock_client_supports_extended_configuration_hooks() {
             track_dirty_pages: Some(true),
             ..MachineConfiguration::default()
         })
+        .await
         .unwrap();
     client
         .put_cpu_configuration(&json!({"reg_modifiers": {"x0": 1}}))
+        .await
         .unwrap();
     client
         .put_entropy_device(&EntropyDevice {
@@ -48,5 +50,6 @@ fn test_mock_client_supports_extended_configuration_hooks() {
                 ..RateLimiter::default()
             }),
         })
+        .await
         .unwrap();
 }
