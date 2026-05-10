@@ -11,7 +11,7 @@ use firecracker_sdk::{
     NetworkInterface, NoopClient, StaticNetworkConfiguration, VsockDevice, add_vsocks_handler,
     attach_drives_handler, bootstrap_logging_handler, config_mmds_handler,
     create_boot_source_handler, create_log_files_handler, create_machine_handler,
-    create_network_interfaces_handler, new_set_metadata_handler,
+    create_network_interfaces_handler, new_create_balloon_handler, new_set_metadata_handler,
 };
 
 fn compare_handler_names(expected: &[&str], actual: &HandlerList) {
@@ -280,7 +280,10 @@ async fn test_handler_list_run_awaits_async_handlers_in_order() {
     let mut machine = Machine::new_with_client(Config::default(), Box::new(NoopClient)).unwrap();
     list.run(&mut machine).await.unwrap();
 
-    assert_eq!(vec!["first".to_string(), "second".to_string()], *order.lock().unwrap());
+    assert_eq!(
+        vec!["first".to_string(), "second".to_string()],
+        *order.lock().unwrap()
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -496,6 +499,25 @@ async fn TestHandlers() {
                 ..MockClient::default()
             },
         ),
+        (
+            firecracker_sdk::CREATE_BALLOON_HANDLER_NAME,
+            new_create_balloon_handler(64, true, 5),
+            Config::default(),
+            MockClient {
+                put_balloon_fn: Some(Box::new({
+                    let called = called.clone();
+                    move |balloon| {
+                        *called.lock().unwrap() =
+                            firecracker_sdk::CREATE_BALLOON_HANDLER_NAME.to_string();
+                        assert_eq!(Some(64), balloon.amount_mib);
+                        assert_eq!(Some(true), balloon.deflate_on_oom);
+                        assert_eq!(5, balloon.stats_polling_intervals);
+                        Ok(())
+                    }
+                })),
+                ..MockClient::default()
+            },
+        ),
     ];
 
     for (expected_name, handler, config, client) in cases {
@@ -522,7 +544,9 @@ async fn test_create_log_files_handler_creates_and_cleans_up_fifo_paths() {
     )
     .unwrap();
 
-    (create_log_files_handler().func)(&mut machine).await.unwrap();
+    (create_log_files_handler().func)(&mut machine)
+        .await
+        .unwrap();
 
     assert!(std::fs::metadata(&log_fifo).unwrap().file_type().is_fifo());
     assert!(std::fs::metadata(&metrics_file).unwrap().is_file());
@@ -556,7 +580,9 @@ async fn test_create_log_files_handler_captures_fifo_log_to_writer() {
     )
     .unwrap();
 
-    (create_log_files_handler().func)(&mut machine).await.unwrap();
+    (create_log_files_handler().func)(&mut machine)
+        .await
+        .unwrap();
 
     let mut fifo_writer = std::fs::OpenOptions::new()
         .write(true)

@@ -1280,6 +1280,203 @@ fn test_update_guest_drive_and_network_rate_limit() {
 }
 
 #[test]
+fn test_option_aware_machine_wrappers_call_through() {
+    let seen_drive = Arc::new(Mutex::new(None::<PartialDrive>));
+    let seen_network = Arc::new(Mutex::new(None::<RateLimiterSet>));
+    let seen_states = Arc::new(Mutex::new(Vec::new()));
+    let seen_snapshot = Arc::new(Mutex::new(None::<SnapshotConfig>));
+    let seen_balloon = Arc::new(Mutex::new(None::<Balloon>));
+    let seen_balloon_update = Arc::new(Mutex::new(None::<i64>));
+    let seen_balloon_stats = Arc::new(Mutex::new(None::<i64>));
+    let client = MockClient {
+        patch_guest_drive_by_id_fn: Some(Box::new({
+            let seen_drive = seen_drive.clone();
+            move |drive_id, drive| {
+                assert_eq!("root", drive_id);
+                *seen_drive.lock().unwrap() = Some(drive.clone());
+                Ok(())
+            }
+        })),
+        patch_guest_network_interface_by_id_fn: Some(Box::new({
+            let seen_network = seen_network.clone();
+            move |iface_id, iface| {
+                assert_eq!("eth0", iface_id);
+                *seen_network.lock().unwrap() = Some(RateLimiterSet {
+                    in_rate_limiter: iface.rx_rate_limiter.clone(),
+                    out_rate_limiter: iface.tx_rate_limiter.clone(),
+                });
+                Ok(())
+            }
+        })),
+        patch_vm_fn: Some(Box::new({
+            let seen_states = seen_states.clone();
+            move |vm| {
+                seen_states.lock().unwrap().push(vm.state.clone().unwrap());
+                Ok(())
+            }
+        })),
+        create_snapshot_fn: Some(Box::new({
+            let seen_snapshot = seen_snapshot.clone();
+            move |snapshot| {
+                *seen_snapshot.lock().unwrap() = Some(SnapshotConfig {
+                    mem_file_path: snapshot.mem_file_path.clone(),
+                    snapshot_path: snapshot.snapshot_path.clone(),
+                    ..SnapshotConfig::default()
+                });
+                Ok(())
+            }
+        })),
+        put_balloon_fn: Some(Box::new({
+            let seen_balloon = seen_balloon.clone();
+            move |balloon| {
+                *seen_balloon.lock().unwrap() = Some(balloon.clone());
+                Ok(())
+            }
+        })),
+        patch_balloon_fn: Some(Box::new({
+            let seen_balloon_update = seen_balloon_update.clone();
+            move |update| {
+                *seen_balloon_update.lock().unwrap() = update.amount_mib;
+                Ok(())
+            }
+        })),
+        patch_balloon_stats_interval_fn: Some(Box::new({
+            let seen_balloon_stats = seen_balloon_stats.clone();
+            move |update| {
+                *seen_balloon_stats.lock().unwrap() = update.stats_polling_intervals;
+                Ok(())
+            }
+        })),
+        ..MockClient::default()
+    };
+
+    let mut machine = Machine::new_with_client(Config::default(), Box::new(client)).unwrap();
+    machine
+        .update_guest_drive_with_opts(
+            "root",
+            "/tmp/rootfs",
+            vec![firecracker_sdk::with_read_timeout(Duration::from_millis(5))],
+        )
+        .unwrap();
+    machine
+        .update_guest_network_interface_rate_limit_with_options(
+            "eth0",
+            RateLimiterSet {
+                in_rate_limiter: Some(RateLimiter::default()),
+                out_rate_limiter: Some(RateLimiter::default()),
+            },
+            firecracker_sdk::RequestOptions::from_opts(vec![
+                firecracker_sdk::without_read_timeout(),
+            ]),
+        )
+        .unwrap();
+    machine
+        .pause_vm_with_opts(vec![firecracker_sdk::with_read_timeout(
+            Duration::from_millis(5),
+        )])
+        .unwrap();
+    machine
+        .resume_vm_with_options(firecracker_sdk::RequestOptions::from_opts(vec![
+            firecracker_sdk::without_write_timeout(),
+        ]))
+        .unwrap();
+    machine
+        .create_snapshot_with_opts(
+            "/tmp/mem",
+            "/tmp/snapshot",
+            vec![firecracker_sdk::without_read_timeout()],
+        )
+        .unwrap();
+    machine
+        .create_balloon_with_opts(10, true, 1, vec![firecracker_sdk::without_write_timeout()])
+        .unwrap();
+    machine
+        .update_balloon_with_options(
+            6,
+            firecracker_sdk::RequestOptions::from_opts(vec![
+                firecracker_sdk::without_read_timeout(),
+            ]),
+        )
+        .unwrap();
+    machine
+        .update_balloon_stats_with_opts(
+            7,
+            vec![firecracker_sdk::with_read_timeout(Duration::from_millis(5))],
+        )
+        .unwrap();
+
+    assert_eq!(
+        Some(PartialDrive {
+            drive_id: Some("root".to_string()),
+            path_on_host: Some("/tmp/rootfs".to_string()),
+        }),
+        seen_drive.lock().unwrap().clone()
+    );
+    assert_eq!(
+        Some(RateLimiterSet {
+            in_rate_limiter: Some(RateLimiter::default()),
+            out_rate_limiter: Some(RateLimiter::default()),
+        }),
+        seen_network.lock().unwrap().clone()
+    );
+    assert_eq!(
+        vec![VM_STATE_PAUSED.to_string(), VM_STATE_RESUMED.to_string()],
+        *seen_states.lock().unwrap()
+    );
+    assert_eq!(
+        Some(SnapshotConfig {
+            mem_file_path: Some("/tmp/mem".to_string()),
+            snapshot_path: Some("/tmp/snapshot".to_string()),
+            ..SnapshotConfig::default()
+        }),
+        seen_snapshot.lock().unwrap().clone()
+    );
+    assert_eq!(
+        Some(Balloon {
+            amount_mib: Some(10),
+            deflate_on_oom: Some(true),
+            stats_polling_intervals: 1,
+        }),
+        seen_balloon.lock().unwrap().clone()
+    );
+    assert_eq!(Some(6), *seen_balloon_update.lock().unwrap());
+    assert_eq!(Some(7), *seen_balloon_stats.lock().unwrap());
+}
+
+#[test]
+fn test_machine_iface_option_aware_methods_dispatch() {
+    let seen_states = Arc::new(Mutex::new(Vec::new()));
+    let client = MockClient {
+        patch_vm_fn: Some(Box::new({
+            let seen_states = seen_states.clone();
+            move |vm| {
+                seen_states.lock().unwrap().push(vm.state.clone().unwrap());
+                Ok(())
+            }
+        })),
+        ..MockClient::default()
+    };
+
+    let mut machine = Machine::new_with_client(Config::default(), Box::new(client)).unwrap();
+    let machine_iface: &mut dyn firecracker_sdk::MachineIface = &mut machine;
+    machine_iface
+        .pause_vm_with_options(firecracker_sdk::RequestOptions::from_opts(vec![
+            firecracker_sdk::without_read_timeout(),
+        ]))
+        .unwrap();
+    machine_iface
+        .resume_vm_with_options(firecracker_sdk::RequestOptions::from_opts(vec![
+            firecracker_sdk::without_write_timeout(),
+        ]))
+        .unwrap();
+
+    assert_eq!(
+        vec![VM_STATE_PAUSED.to_string(), VM_STATE_RESUMED.to_string()],
+        *seen_states.lock().unwrap()
+    );
+}
+
+#[test]
 fn test_default_net_ns_path() {
     let machine = Machine::new(Config {
         vmid: "vm-123".to_string(),

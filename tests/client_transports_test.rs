@@ -12,8 +12,9 @@ use firecracker_sdk::{
     AsyncResultExt, Balloon, BalloonStatsUpdate, BalloonUpdate, BootSource, Client, Drive,
     EntropyDevice, Error, FIRECRACKER_REQUEST_TIMEOUT_ENV, InstanceActionInfo, Logger,
     MachineConfiguration, MemoryBackend, Metrics, MmdsConfig, NetworkInterfaceModel,
-    PartialNetworkInterface, RateLimiter, SnapshotCreateParams, SnapshotLoadParams, TokenBucket,
-    Vm, VsockModel, new_unix_socket_transport,
+    PartialNetworkInterface, RateLimiter, RequestOptions, SnapshotCreateParams, SnapshotLoadParams,
+    TokenBucket, Vm, VsockModel, new_unix_socket_transport, with_init_timeout, with_read_timeout,
+    with_request_timeout, with_unix_socket_transport, without_read_timeout,
 };
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -102,9 +103,7 @@ fn split_http_request(request: &str) -> (&str, &str) {
     request.split_once("\r\n\r\n").unwrap()
 }
 
-async fn read_http_request_async(
-    stream: &mut tokio::net::UnixStream,
-) -> std::io::Result<String> {
+async fn read_http_request_async(stream: &mut tokio::net::UnixStream) -> std::io::Result<String> {
     let mut request = Vec::new();
     let delimiter = b"\r\n\r\n";
     let header_end = loop {
@@ -227,6 +226,93 @@ fn test_client_raw_request_uses_unix_socket() {
     handle.join().unwrap();
 }
 
+#[test]
+fn test_client_new_with_opts_overrides_transport_and_timeouts() {
+    let client = Client::new_with_opts(
+        "/tmp/original.sock",
+        [
+            with_request_timeout(Duration::from_millis(250)),
+            with_init_timeout(Duration::from_secs(9)),
+            with_unix_socket_transport(new_unix_socket_transport(
+                "/tmp/override.sock",
+                Duration::from_secs(2),
+            )),
+        ],
+    );
+
+    assert_eq!("/tmp/override.sock", client.socket_path());
+    assert_eq!(Duration::from_secs(2), client.request_timeout());
+    assert_eq!(Duration::from_secs(9), client.init_timeout());
+}
+
+#[test]
+fn test_client_patch_vm_with_options_overrides_read_timeout() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let socket_path = temp_dir.path().join("transport-read-timeout-override.sock");
+    let listener = UnixListener::bind(&socket_path).unwrap();
+
+    let handle = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let request = read_http_request(&mut stream).unwrap();
+        let (head, body) = split_http_request(&request);
+        assert!(head.starts_with("PATCH /vm HTTP/1.1\r\n"));
+        assert_eq!(r#"{"state":"Paused"}"#, body);
+
+        thread::sleep(Duration::from_millis(150));
+        let _ = stream.write_all(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n");
+    });
+
+    let client = Client::new_with_opts(
+        socket_path.display().to_string(),
+        [with_request_timeout(Duration::from_secs(1))],
+    );
+    let error = client
+        .patch_vm_with_options(
+            &Vm::paused(),
+            RequestOptions::from_opts(vec![with_read_timeout(Duration::from_millis(50))]),
+        )
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        Error::Io(ref error) if error.kind() == std::io::ErrorKind::TimedOut
+    ));
+
+    handle.join().unwrap();
+}
+
+#[test]
+fn test_client_patch_vm_with_options_can_disable_read_timeout() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let socket_path = temp_dir.path().join("transport-read-timeout-disabled.sock");
+    let listener = UnixListener::bind(&socket_path).unwrap();
+
+    let handle = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let request = read_http_request(&mut stream).unwrap();
+        let (head, body) = split_http_request(&request);
+        assert!(head.starts_with("PATCH /vm HTTP/1.1\r\n"));
+        assert_eq!(r#"{"state":"Paused"}"#, body);
+
+        thread::sleep(Duration::from_millis(150));
+        stream
+            .write_all(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n")
+            .unwrap();
+    });
+
+    let client = Client::new_with_opts(
+        socket_path.display().to_string(),
+        [with_request_timeout(Duration::from_millis(50))],
+    );
+    client
+        .patch_vm_with_options(
+            &Vm::paused(),
+            RequestOptions::from_opts(vec![without_read_timeout()]),
+        )
+        .unwrap();
+
+    handle.join().unwrap();
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn test_client_raw_request_uses_unix_socket_async_runtime() {
     let temp_dir = tempfile::tempdir().unwrap();
@@ -331,7 +417,10 @@ async fn test_transport_returns_timed_out_for_slow_response_async_runtime() {
         socket_path.display().to_string(),
         Duration::from_millis(100),
     );
-    let error = transport.raw_request("GET", "/slow", None).await.unwrap_err();
+    let error = transport
+        .raw_request("GET", "/slow", None)
+        .await
+        .unwrap_err();
     assert!(matches!(
         error,
         Error::Io(ref error) if error.kind() == std::io::ErrorKind::TimedOut

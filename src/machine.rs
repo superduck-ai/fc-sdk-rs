@@ -11,7 +11,11 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use tokio::process::{Child, Command};
 
-use crate::client::{Client, ClientOps, NoopClient};
+use crate::client::{
+    Client, ClientOps, CreateSnapshotOpt, NoopClient, PatchBalloonOpt,
+    PatchBalloonStatsIntervalOpt, PatchGuestDriveByIdOpt, PatchGuestNetworkInterfaceByIdOpt,
+    PatchVmOpt, PutBalloonOpt, RequestOptions,
+};
 use crate::cni::internal::{NetlinkOps, RealNetlinkOps};
 use crate::command_builder::{DEFAULT_FC_BIN, VMCommand, VMCommandBuilder, seccomp_args};
 use crate::config::{
@@ -1215,13 +1219,38 @@ impl Machine {
     }
 
     pub async fn update_guest_drive(&mut self, drive_id: &str, path_on_host: &str) -> Result<()> {
+        self.update_guest_drive_with_options(drive_id, path_on_host, RequestOptions::default())
+            .await
+    }
+
+    pub async fn update_guest_drive_with_opts(
+        &mut self,
+        drive_id: &str,
+        path_on_host: &str,
+        opts: impl IntoIterator<Item = PatchGuestDriveByIdOpt>,
+    ) -> Result<()> {
+        self.update_guest_drive_with_options(
+            drive_id,
+            path_on_host,
+            RequestOptions::from_opts(opts),
+        )
+        .await
+    }
+
+    pub async fn update_guest_drive_with_options(
+        &mut self,
+        drive_id: &str,
+        path_on_host: &str,
+        options: RequestOptions,
+    ) -> Result<()> {
         self.client
-            .patch_guest_drive_by_id(
+            .patch_guest_drive_by_id_with_options(
                 drive_id,
                 &PartialDrive {
                     drive_id: Some(drive_id.to_string()),
                     path_on_host: Some(path_on_host.to_string()),
                 },
+                options,
             )
             .await
     }
@@ -1231,24 +1260,81 @@ impl Machine {
         iface_id: &str,
         rate_limiters: RateLimiterSet,
     ) -> Result<()> {
+        self.update_guest_network_interface_rate_limit_with_options(
+            iface_id,
+            rate_limiters,
+            RequestOptions::default(),
+        )
+        .await
+    }
+
+    pub async fn update_guest_network_interface_rate_limit_with_opts(
+        &mut self,
+        iface_id: &str,
+        rate_limiters: RateLimiterSet,
+        opts: impl IntoIterator<Item = PatchGuestNetworkInterfaceByIdOpt>,
+    ) -> Result<()> {
+        self.update_guest_network_interface_rate_limit_with_options(
+            iface_id,
+            rate_limiters,
+            RequestOptions::from_opts(opts),
+        )
+        .await
+    }
+
+    pub async fn update_guest_network_interface_rate_limit_with_options(
+        &mut self,
+        iface_id: &str,
+        rate_limiters: RateLimiterSet,
+        options: RequestOptions,
+    ) -> Result<()> {
         self.client
-            .patch_guest_network_interface_by_id(
+            .patch_guest_network_interface_by_id_with_options(
                 iface_id,
                 &PartialNetworkInterface {
                     iface_id: Some(iface_id.to_string()),
                     rx_rate_limiter: rate_limiters.in_rate_limiter,
                     tx_rate_limiter: rate_limiters.out_rate_limiter,
                 },
+                options,
             )
             .await
     }
 
     pub async fn pause_vm(&mut self) -> Result<()> {
-        self.client.patch_vm(&Vm::paused()).await
+        self.pause_vm_with_options(RequestOptions::default()).await
+    }
+
+    pub async fn pause_vm_with_opts(
+        &mut self,
+        opts: impl IntoIterator<Item = PatchVmOpt>,
+    ) -> Result<()> {
+        self.pause_vm_with_options(RequestOptions::from_opts(opts))
+            .await
+    }
+
+    pub async fn pause_vm_with_options(&mut self, options: RequestOptions) -> Result<()> {
+        self.client
+            .patch_vm_with_options(&Vm::paused(), options)
+            .await
     }
 
     pub async fn resume_vm(&mut self) -> Result<()> {
-        self.client.patch_vm(&Vm::resumed()).await
+        self.resume_vm_with_options(RequestOptions::default()).await
+    }
+
+    pub async fn resume_vm_with_opts(
+        &mut self,
+        opts: impl IntoIterator<Item = PatchVmOpt>,
+    ) -> Result<()> {
+        self.resume_vm_with_options(RequestOptions::from_opts(opts))
+            .await
+    }
+
+    pub async fn resume_vm_with_options(&mut self, options: RequestOptions) -> Result<()> {
+        self.client
+            .patch_vm_with_options(&Vm::resumed(), options)
+            .await
     }
 
     pub async fn create_snapshot(
@@ -1256,11 +1342,38 @@ impl Machine {
         mem_file_path: &str,
         snapshot_path: &str,
     ) -> Result<()> {
+        self.create_snapshot_with_options(mem_file_path, snapshot_path, RequestOptions::default())
+            .await
+    }
+
+    pub async fn create_snapshot_with_opts(
+        &mut self,
+        mem_file_path: &str,
+        snapshot_path: &str,
+        opts: impl IntoIterator<Item = CreateSnapshotOpt>,
+    ) -> Result<()> {
+        self.create_snapshot_with_options(
+            mem_file_path,
+            snapshot_path,
+            RequestOptions::from_opts(opts),
+        )
+        .await
+    }
+
+    pub async fn create_snapshot_with_options(
+        &mut self,
+        mem_file_path: &str,
+        snapshot_path: &str,
+        options: RequestOptions,
+    ) -> Result<()> {
         self.client
-            .create_snapshot(&SnapshotCreateParams {
-                mem_file_path: Some(mem_file_path.to_string()),
-                snapshot_path: Some(snapshot_path.to_string()),
-            })
+            .create_snapshot_with_options(
+                &SnapshotCreateParams {
+                    mem_file_path: Some(mem_file_path.to_string()),
+                    snapshot_path: Some(snapshot_path.to_string()),
+                },
+                options,
+            )
             .await
     }
 
@@ -1283,12 +1396,47 @@ impl Machine {
         deflate_on_oom: bool,
         stats_polling_intervals: i64,
     ) -> Result<()> {
+        self.create_balloon_with_options(
+            amount_mib,
+            deflate_on_oom,
+            stats_polling_intervals,
+            RequestOptions::default(),
+        )
+        .await
+    }
+
+    pub async fn create_balloon_with_opts(
+        &mut self,
+        amount_mib: i64,
+        deflate_on_oom: bool,
+        stats_polling_intervals: i64,
+        opts: impl IntoIterator<Item = PutBalloonOpt>,
+    ) -> Result<()> {
+        self.create_balloon_with_options(
+            amount_mib,
+            deflate_on_oom,
+            stats_polling_intervals,
+            RequestOptions::from_opts(opts),
+        )
+        .await
+    }
+
+    pub async fn create_balloon_with_options(
+        &mut self,
+        amount_mib: i64,
+        deflate_on_oom: bool,
+        stats_polling_intervals: i64,
+        options: RequestOptions,
+    ) -> Result<()> {
         self.client
-            .put_balloon(&Balloon {
-                amount_mib: Some(amount_mib),
-                deflate_on_oom: Some(deflate_on_oom),
-                stats_polling_intervals,
-            })
+            .put_balloon_with_options(
+                &Balloon {
+                    amount_mib: Some(amount_mib),
+                    deflate_on_oom: Some(deflate_on_oom),
+                    stats_polling_intervals,
+                },
+                options,
+            )
             .await
     }
 
@@ -1297,10 +1445,31 @@ impl Machine {
     }
 
     pub async fn update_balloon(&mut self, amount_mib: i64) -> Result<()> {
+        self.update_balloon_with_options(amount_mib, RequestOptions::default())
+            .await
+    }
+
+    pub async fn update_balloon_with_opts(
+        &mut self,
+        amount_mib: i64,
+        opts: impl IntoIterator<Item = PatchBalloonOpt>,
+    ) -> Result<()> {
+        self.update_balloon_with_options(amount_mib, RequestOptions::from_opts(opts))
+            .await
+    }
+
+    pub async fn update_balloon_with_options(
+        &mut self,
+        amount_mib: i64,
+        options: RequestOptions,
+    ) -> Result<()> {
         self.client
-            .patch_balloon(&BalloonUpdate {
-                amount_mib: Some(amount_mib),
-            })
+            .patch_balloon_with_options(
+                &BalloonUpdate {
+                    amount_mib: Some(amount_mib),
+                },
+                options,
+            )
             .await
     }
 
@@ -1309,10 +1478,34 @@ impl Machine {
     }
 
     pub async fn update_balloon_stats(&mut self, stats_polling_intervals: i64) -> Result<()> {
+        self.update_balloon_stats_with_options(stats_polling_intervals, RequestOptions::default())
+            .await
+    }
+
+    pub async fn update_balloon_stats_with_opts(
+        &mut self,
+        stats_polling_intervals: i64,
+        opts: impl IntoIterator<Item = PatchBalloonStatsIntervalOpt>,
+    ) -> Result<()> {
+        self.update_balloon_stats_with_options(
+            stats_polling_intervals,
+            RequestOptions::from_opts(opts),
+        )
+        .await
+    }
+
+    pub async fn update_balloon_stats_with_options(
+        &mut self,
+        stats_polling_intervals: i64,
+        options: RequestOptions,
+    ) -> Result<()> {
         self.client
-            .patch_balloon_stats_interval(&BalloonStatsUpdate {
-                stats_polling_intervals: Some(stats_polling_intervals),
-            })
+            .patch_balloon_stats_interval_with_options(
+                &BalloonStatsUpdate {
+                    stats_polling_intervals: Some(stats_polling_intervals),
+                },
+                options,
+            )
             .await
     }
 

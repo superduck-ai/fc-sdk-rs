@@ -217,8 +217,11 @@ pub mod vsock;
 
 pub use balloon::{BalloonDevice, BalloonOpt, with_stats_polling_intervals};
 pub use client::{
-    Client, ClientOps, DEFAULT_FIRECRACKER_REQUEST_TIMEOUT, FIRECRACKER_REQUEST_TIMEOUT_ENV,
-    NoopClient,
+    Client, ClientOps, ClientOpt, CreateSnapshotOpt, DEFAULT_FIRECRACKER_REQUEST_TIMEOUT,
+    FIRECRACKER_REQUEST_TIMEOUT_ENV, NoopClient, PatchBalloonOpt, PatchBalloonStatsIntervalOpt,
+    PatchGuestDriveByIdOpt, PatchGuestNetworkInterfaceByIdOpt, PatchVmOpt, PutBalloonOpt,
+    RequestOpt, RequestOptions, with_init_timeout, with_read_timeout, with_request_timeout,
+    with_unix_socket_transport, with_write_timeout, without_read_timeout, without_write_timeout,
 };
 pub use client_transports::{UnixSocketTransport, new_unix_socket_transport};
 pub use cni::internal::{RealNetlinkOps, UnsupportedNetlinkOps};
@@ -238,13 +241,14 @@ pub use error::{Error, Result};
 pub use fctesting::{AsyncResultExt, BlockingFutureExt};
 pub use handlers::{
     ADD_VSOCKS_HANDLER_NAME, ATTACH_DRIVES_HANDLER_NAME, BOOTSTRAP_LOGGING_HANDLER_NAME,
-    CONFIG_MMDS_HANDLER_NAME, CREATE_BOOT_SOURCE_HANDLER_NAME, CREATE_LOG_FILES_HANDLER_NAME,
-    CREATE_MACHINE_HANDLER_NAME, CREATE_NETWORK_INTERFACES_HANDLER_NAME, Handler, HandlerList,
-    Handlers, LINK_FILES_TO_ROOTFS_HANDLER_NAME, LOAD_SNAPSHOT_HANDLER_NAME,
-    NEW_SET_METADATA_HANDLER_NAME, add_vsocks_handler, attach_drives_handler,
-    bootstrap_logging_handler, config_mmds_handler, create_boot_source_handler,
-    create_log_files_handler, create_machine_handler, create_network_interfaces_handler,
-    default_handlers, new_set_metadata_handler,
+    CONFIG_MMDS_HANDLER_NAME, CREATE_BALLOON_HANDLER_NAME, CREATE_BOOT_SOURCE_HANDLER_NAME,
+    CREATE_LOG_FILES_HANDLER_NAME, CREATE_MACHINE_HANDLER_NAME,
+    CREATE_NETWORK_INTERFACES_HANDLER_NAME, Handler, HandlerList, Handlers,
+    LINK_FILES_TO_ROOTFS_HANDLER_NAME, LOAD_SNAPSHOT_HANDLER_NAME, NEW_SET_METADATA_HANDLER_NAME,
+    add_vsocks_handler, attach_drives_handler, bootstrap_logging_handler, config_mmds_handler,
+    create_boot_source_handler, create_log_files_handler, create_machine_handler,
+    create_network_interfaces_handler, default_handlers, new_create_balloon_handler,
+    new_set_metadata_handler,
 };
 pub use internal::{find_first_vendor_id, support_cpu_template};
 pub use jailer::{

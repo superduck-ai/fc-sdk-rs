@@ -19,6 +19,7 @@ pub const CONFIG_MMDS_HANDLER_NAME: &str = "fcinit.ConfigMmds";
 pub const LINK_FILES_TO_ROOTFS_HANDLER_NAME: &str = "fcinit.LinkFilesToRootFS";
 pub const SETUP_NETWORK_HANDLER_NAME: &str = "fcinit.SetupNetwork";
 pub const SETUP_KERNEL_ARGS_HANDLER_NAME: &str = "fcinit.SetupKernelArgs";
+pub const CREATE_BALLOON_HANDLER_NAME: &str = "fcinit.CreateBalloon";
 pub const LOAD_SNAPSHOT_HANDLER_NAME: &str = "fcinit.LoadSnapshot";
 
 pub const VALIDATE_CFG_HANDLER_NAME: &str = "validate.Cfg";
@@ -297,6 +298,20 @@ pub fn new_set_metadata_handler(metadata: serde_json::Value) -> Handler {
     Handler::new_async(NEW_SET_METADATA_HANDLER_NAME, move |machine| {
         let metadata = metadata.clone();
         Box::pin(async move { machine.set_metadata(&metadata).await })
+    })
+}
+
+pub fn new_create_balloon_handler(
+    amount_mib: i64,
+    deflate_on_oom: bool,
+    stats_polling_intervals: i64,
+) -> Handler {
+    Handler::new_async(CREATE_BALLOON_HANDLER_NAME, move |machine| {
+        Box::pin(async move {
+            machine
+                .create_balloon(amount_mib, deflate_on_oom, stats_polling_intervals)
+                .await
+        })
     })
 }
 
