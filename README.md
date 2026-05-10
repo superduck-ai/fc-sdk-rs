@@ -8,7 +8,7 @@ into idiomatic Rust.
 
 The current crate includes:
 
-- a synchronous Firecracker client over Unix domain sockets
+- an async Firecracker client over Unix domain sockets
 - machine lifecycle management
 - command and jailer builders
 - drive, balloon, rate limiter, snapshot, vsock, MMDS, and handler support

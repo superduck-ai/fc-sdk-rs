@@ -6,9 +6,9 @@ use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
 use firecracker_sdk::{
-    CommandStdio, Config, DEFAULT_JAILER_BIN, DEFAULT_JAILER_PATH, DEFAULT_SOCKET_PATH, Drive,
-    JailerCommandBuilder, JailerConfig, Machine, NaiveChrootStrategy, NoopClient,
-    ROOTFS_FOLDER_NAME, get_numa_cpuset,
+    AsyncResultExt, BlockingFutureExt, CommandStdio, Config, DEFAULT_JAILER_BIN,
+    DEFAULT_JAILER_PATH, DEFAULT_SOCKET_PATH, Drive, JailerCommandBuilder, JailerConfig, Machine,
+    NaiveChrootStrategy, NoopClient, ROOTFS_FOLDER_NAME, get_numa_cpuset,
 };
 
 fn real_firecracker_binary() -> &'static str {
@@ -61,26 +61,21 @@ fn base_jailer_config() -> JailerConfig {
 #[test]
 fn TestJailerBuilder() {
     let cases = vec![
-        (
-            "required fields",
-            base_jailer_config(),
-            None,
-            {
-                let mut expected = vec![
-                    DEFAULT_JAILER_BIN.to_string(),
-                    "--id".to_string(),
-                    "my-test-id".to_string(),
-                    "--uid".to_string(),
-                    "123".to_string(),
-                    "--gid".to_string(),
-                    "100".to_string(),
-                    "--exec-file".to_string(),
-                    "/path/to/firecracker".to_string(),
-                ];
-                expected.extend(cpuset_args(0));
-                expected
-            },
-        ),
+        ("required fields", base_jailer_config(), None, {
+            let mut expected = vec![
+                DEFAULT_JAILER_BIN.to_string(),
+                "--id".to_string(),
+                "my-test-id".to_string(),
+                "--uid".to_string(),
+                "123".to_string(),
+                "--gid".to_string(),
+                "100".to_string(),
+                "--exec-file".to_string(),
+                "/path/to/firecracker".to_string(),
+            ];
+            expected.extend(cpuset_args(0));
+            expected
+        }),
         (
             "other jailer binary name",
             JailerConfig {
@@ -647,10 +642,10 @@ fn test_real_jailer_execution_starts_vm() {
     })
     .unwrap();
 
-    if let Err(error) = machine.start() {
+    if let Err(error) = machine.start().block_on() {
         let socket_metadata = std::fs::metadata(&machine.cfg.socket_path);
         let socket_exists = socket_metadata.is_ok();
-        let client_result = machine.client.get_machine_configuration();
+        let client_result = machine.client.get_machine_configuration().block_on();
         panic!(
             "start failed: {error}; socket_path={}; socket_exists={socket_exists}; client_result={client_result:?}",
             machine.cfg.socket_path

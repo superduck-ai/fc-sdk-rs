@@ -8,11 +8,11 @@ use std::thread;
 use std::time::Duration;
 
 use firecracker_sdk::{
-    Balloon, BalloonStatsUpdate, BalloonUpdate, BootSource, Client, Drive, EntropyDevice, Error,
-    FIRECRACKER_REQUEST_TIMEOUT_ENV, InstanceActionInfo, Logger, MachineConfiguration,
-    MemoryBackend, Metrics, MmdsConfig, NetworkInterfaceModel, PartialNetworkInterface,
-    RateLimiter, SnapshotCreateParams, SnapshotLoadParams, TokenBucket, Vm, VsockModel,
-    new_unix_socket_transport,
+    AsyncResultExt, Balloon, BalloonStatsUpdate, BalloonUpdate, BootSource, Client, Drive,
+    EntropyDevice, Error, FIRECRACKER_REQUEST_TIMEOUT_ENV, InstanceActionInfo, Logger,
+    MachineConfiguration, MemoryBackend, Metrics, MmdsConfig, NetworkInterfaceModel,
+    PartialNetworkInterface, RateLimiter, SnapshotCreateParams, SnapshotLoadParams, TokenBucket,
+    Vm, VsockModel, new_unix_socket_transport,
 };
 use serde_json::{Value, json};
 

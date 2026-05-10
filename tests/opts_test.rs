@@ -1,8 +1,9 @@
 use firecracker_sdk::fctesting::MockClient;
 use firecracker_sdk::{
-    CREATE_BOOT_SOURCE_HANDLER_NAME, CREATE_MACHINE_HANDLER_NAME, Config, FirecrackerVersion,
-    LOAD_SNAPSHOT_HANDLER_NAME, Machine, MachineConfiguration, SnapshotConfig, VMCommandBuilder,
-    new_machine, with_client, with_memory_backend, with_process_runner, with_snapshot,
+    AsyncResultExt, CREATE_BOOT_SOURCE_HANDLER_NAME, CREATE_MACHINE_HANDLER_NAME, Config,
+    FirecrackerVersion, LOAD_SNAPSHOT_HANDLER_NAME, Machine, MachineConfiguration, SnapshotConfig,
+    VMCommandBuilder, new_machine, with_client, with_memory_backend, with_process_runner,
+    with_snapshot,
 };
 
 #[test]

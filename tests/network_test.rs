@@ -5,11 +5,11 @@ use std::net::Ipv4Addr;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use firecracker_sdk::fctesting::MockClient;
 use firecracker_sdk::cni::internal::{Link, MockNetlinkOps};
 use firecracker_sdk::cni::{CniDnsConfig, CniInterface, CniIpConfig, CniResult, CniRoute};
+use firecracker_sdk::fctesting::MockClient;
 use firecracker_sdk::{
-    CleanupFn, CniConfiguration, CniNetworkOperations, CniRuntimeConf, Config,
+    AsyncResultExt, CleanupFn, CniConfiguration, CniNetworkOperations, CniRuntimeConf, Config,
     DEFAULT_CNI_BIN_DIR, DEFAULT_CNI_CACHE_DIR, DEFAULT_CNI_CONF_DIR, IPConfiguration, Machine,
     MachineConfiguration, NetworkInterface, NetworkInterfaces, RealCniNetworkOperations,
     RealNetlinkOps, StaticNetworkConfiguration, parse_kernel_args,
@@ -543,7 +543,11 @@ fn TestNetworkMachineCNIWithParsedConfig() {
         ),
         fs::read_to_string(&log_path).unwrap()
     );
-    assert!(!cache_dir.join("results/fcnet-inline-vm-inline-veth0").exists());
+    assert!(
+        !cache_dir
+            .join("results/fcnet-inline-vm-inline-veth0")
+            .exists()
+    );
     assert!(!net_ns_path.exists());
 }
 

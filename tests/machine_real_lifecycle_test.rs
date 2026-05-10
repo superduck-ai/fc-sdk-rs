@@ -5,7 +5,7 @@ use std::thread;
 use std::time::Duration;
 
 use firecracker_sdk::{
-    Config, FifoLogWriter, MachineConfiguration, VMCommandBuilder, new_machine,
+    AsyncResultExt, Config, FifoLogWriter, MachineConfiguration, VMCommandBuilder, new_machine,
     with_process_runner, with_snapshot,
 };
 
@@ -184,10 +184,9 @@ fn test_real_create_snapshot_requires_paused_vm() {
     .unwrap();
 
     machine.start().unwrap();
-    let error = machine.create_snapshot(
-        &mem_path.display().to_string(),
-        &snapshot_path.display().to_string(),
-    );
+    let mem_path_string = mem_path.display().to_string();
+    let snapshot_path_string = snapshot_path.display().to_string();
+    let error = machine.create_snapshot(&mem_path_string, &snapshot_path_string);
     assert!(error.is_err());
 
     machine.stop_vmm().unwrap();

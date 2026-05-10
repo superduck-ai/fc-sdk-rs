@@ -13,9 +13,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use firecracker_sdk::{
-    Config, IPConfiguration, MachineConfiguration, NetworkInterface, NetworkInterfaces,
-    StaticNetworkConfiguration, VMCommandBuilder, new_machine, with_memory_backend,
-    with_process_runner, with_read_only, with_snapshot,
+    AsyncResultExt, Config, IPConfiguration, MachineConfiguration, NetworkInterface,
+    NetworkInterfaces, StaticNetworkConfiguration, VMCommandBuilder, new_machine,
+    with_memory_backend, with_process_runner, with_read_only, with_snapshot,
 };
 use ipnet::Ipv4Net;
 

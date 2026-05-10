@@ -4,7 +4,8 @@ use firecracker_sdk::{
     Config, DrivesBuilder, JailerConfig, Machine, MachineConfiguration, NaiveChrootStrategy,
 };
 
-fn main() -> Result<(), firecracker_sdk::Error> {
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), firecracker_sdk::Error> {
     let kernel_image_path = "/path/to/kernel-image";
 
     let mut machine = Machine::new(Config {
@@ -27,8 +28,8 @@ fn main() -> Result<(), firecracker_sdk::Error> {
         ..Config::default()
     })?;
 
-    machine.start()?;
-    machine.wait()?;
+    machine.start().await?;
+    machine.wait().await?;
 
     Ok(())
 }

@@ -1,3 +1,5 @@
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use crate::config::MMDSVersion;
@@ -24,7 +26,9 @@ pub const VALIDATE_JAILER_CFG_HANDLER_NAME: &str = "validate.JailerCfg";
 pub const VALIDATE_NETWORK_CFG_HANDLER_NAME: &str = "validate.NetworkCfg";
 pub const VALIDATE_LOAD_SNAPSHOT_CFG_HANDLER_NAME: &str = "validate.LoadSnapshotCfg";
 
-pub type HandlerFn = Arc<dyn Fn(&mut Machine) -> Result<()> + Send + Sync + 'static>;
+pub type HandlerFuture<'a> = Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
+pub type HandlerFn =
+    Arc<dyn for<'a> Fn(&'a mut Machine) -> HandlerFuture<'a> + Send + Sync + 'static>;
 
 #[derive(Clone)]
 pub struct Handler {
@@ -42,6 +46,17 @@ impl Handler {
     pub fn new(
         name: impl Into<String>,
         func: impl Fn(&mut Machine) -> Result<()> + Send + Sync + 'static,
+    ) -> Self {
+        let func = Arc::new(func);
+        Self::new_async(name, move |machine| {
+            let result = func(machine);
+            Box::pin(async move { result })
+        })
+    }
+
+    pub fn new_async(
+        name: impl Into<String>,
+        func: impl for<'a> Fn(&'a mut Machine) -> HandlerFuture<'a> + Send + Sync + 'static,
     ) -> Self {
         Self {
             name: name.into(),
@@ -128,9 +143,9 @@ impl HandlerList {
         self
     }
 
-    pub fn run(&self, machine: &mut Machine) -> Result<()> {
+    pub async fn run(&self, machine: &mut Machine) -> Result<()> {
         for handler in &self.list {
-            (handler.func)(machine)?;
+            (handler.func)(machine).await?;
         }
         Ok(())
     }
@@ -143,11 +158,11 @@ pub struct Handlers {
 }
 
 impl Handlers {
-    pub fn run(&self, machine: &mut Machine) -> Result<()> {
+    pub async fn run(&self, machine: &mut Machine) -> Result<()> {
         if !machine.cfg.disable_validation {
-            self.validation.run(machine)?;
+            self.validation.run(machine).await?;
         }
-        self.fc_init.run(machine)
+        self.fc_init.run(machine).await
     }
 }
 
@@ -221,7 +236,9 @@ pub fn network_config_validation_handler() -> Handler {
 }
 
 pub fn start_vmm_handler() -> Handler {
-    Handler::new(START_VMM_HANDLER_NAME, |machine| machine.start_vmm())
+    Handler::new_async(START_VMM_HANDLER_NAME, |machine| {
+        Box::pin(async move { machine.start_vmm().await })
+    })
 }
 
 pub fn create_log_files_handler() -> Handler {
@@ -231,55 +248,66 @@ pub fn create_log_files_handler() -> Handler {
 }
 
 pub fn bootstrap_logging_handler() -> Handler {
-    Handler::new(BOOTSTRAP_LOGGING_HANDLER_NAME, |machine| {
-        machine.setup_logging()?;
-        machine.setup_metrics()
+    Handler::new_async(BOOTSTRAP_LOGGING_HANDLER_NAME, |machine| {
+        Box::pin(async move {
+            machine.setup_logging().await?;
+            machine.setup_metrics().await
+        })
     })
 }
 
 pub fn create_machine_handler() -> Handler {
-    Handler::new(CREATE_MACHINE_HANDLER_NAME, |machine| {
-        machine.create_machine()
+    Handler::new_async(CREATE_MACHINE_HANDLER_NAME, |machine| {
+        Box::pin(async move { machine.create_machine().await })
     })
 }
 
 pub fn create_boot_source_handler() -> Handler {
-    Handler::new(CREATE_BOOT_SOURCE_HANDLER_NAME, |machine| {
-        let image = machine.cfg.kernel_image_path.clone();
-        let initrd = machine.cfg.initrd_path.clone();
-        let kernel_args = machine.cfg.kernel_args.clone();
-        machine.create_boot_source(&image, initrd.as_deref(), Some(&kernel_args))
+    Handler::new_async(CREATE_BOOT_SOURCE_HANDLER_NAME, |machine| {
+        Box::pin(async move {
+            let image = machine.cfg.kernel_image_path.clone();
+            let initrd = machine.cfg.initrd_path.clone();
+            let kernel_args = machine.cfg.kernel_args.clone();
+            machine
+                .create_boot_source(&image, initrd.as_deref(), Some(&kernel_args))
+                .await
+        })
     })
 }
 
 pub fn attach_drives_handler() -> Handler {
-    Handler::new(ATTACH_DRIVES_HANDLER_NAME, |machine| {
-        machine.attach_drives()
+    Handler::new_async(ATTACH_DRIVES_HANDLER_NAME, |machine| {
+        Box::pin(async move { machine.attach_drives().await })
     })
 }
 
 pub fn create_network_interfaces_handler() -> Handler {
-    Handler::new(CREATE_NETWORK_INTERFACES_HANDLER_NAME, |machine| {
-        machine.create_network_interfaces()
+    Handler::new_async(CREATE_NETWORK_INTERFACES_HANDLER_NAME, |machine| {
+        Box::pin(async move { machine.create_network_interfaces().await })
     })
 }
 
 pub fn add_vsocks_handler() -> Handler {
-    Handler::new(ADD_VSOCKS_HANDLER_NAME, |machine| machine.add_vsocks())
+    Handler::new_async(ADD_VSOCKS_HANDLER_NAME, |machine| {
+        Box::pin(async move { machine.add_vsocks().await })
+    })
 }
 
 pub fn new_set_metadata_handler(metadata: serde_json::Value) -> Handler {
-    Handler::new(NEW_SET_METADATA_HANDLER_NAME, move |machine| {
-        machine.set_metadata(&metadata)
+    Handler::new_async(NEW_SET_METADATA_HANDLER_NAME, move |machine| {
+        let metadata = metadata.clone();
+        Box::pin(async move { machine.set_metadata(&metadata).await })
     })
 }
 
 pub fn config_mmds_handler() -> Handler {
-    Handler::new(CONFIG_MMDS_HANDLER_NAME, |machine| {
-        let address = machine.cfg.mmds_address;
-        let ifaces = machine.cfg.network_interfaces.clone();
-        let version = machine.cfg.mmds_version;
-        machine.set_mmds_config(address, &ifaces, version)
+    Handler::new_async(CONFIG_MMDS_HANDLER_NAME, |machine| {
+        Box::pin(async move {
+            let address = machine.cfg.mmds_address;
+            let ifaces = machine.cfg.network_interfaces.clone();
+            let version = machine.cfg.mmds_version;
+            machine.set_mmds_config(address, &ifaces, version).await
+        })
     })
 }
 
@@ -296,8 +324,8 @@ pub fn setup_kernel_args_handler() -> Handler {
 }
 
 pub fn load_snapshot_handler() -> Handler {
-    Handler::new(LOAD_SNAPSHOT_HANDLER_NAME, |machine| {
-        machine.load_snapshot()
+    Handler::new_async(LOAD_SNAPSHOT_HANDLER_NAME, |machine| {
+        Box::pin(async move { machine.load_snapshot().await })
     })
 }
 

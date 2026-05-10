@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use async_trait::async_trait;
+
 use crate::client_transports::{UnixSocketTransport, new_unix_socket_transport};
 use crate::error::Result;
 use crate::models::{
@@ -13,54 +15,59 @@ use crate::utils::env_value_or_default_int;
 pub const FIRECRACKER_REQUEST_TIMEOUT_ENV: &str = "FIRECRACKER_GO_SDK_REQUEST_TIMEOUT_MILLISECONDS";
 pub const DEFAULT_FIRECRACKER_REQUEST_TIMEOUT: i32 = 500;
 
+#[async_trait]
 pub trait ClientOps: Send {
-    fn get_firecracker_version(&mut self) -> Result<FirecrackerVersion> {
+    async fn get_firecracker_version(&mut self) -> Result<FirecrackerVersion> {
         Ok(FirecrackerVersion {
             firecracker_version: String::new(),
         })
     }
 
-    fn put_logger(&mut self, _logger: &Logger) -> Result<()> {
+    async fn put_logger(&mut self, _logger: &Logger) -> Result<()> {
         Ok(())
     }
 
-    fn put_metrics(&mut self, _metrics: &Metrics) -> Result<()> {
+    async fn put_metrics(&mut self, _metrics: &Metrics) -> Result<()> {
         Ok(())
     }
 
-    fn put_machine_configuration(&mut self, _config: &MachineConfiguration) -> Result<()> {
+    async fn put_machine_configuration(&mut self, _config: &MachineConfiguration) -> Result<()> {
         Ok(())
     }
 
-    fn patch_machine_configuration(&mut self, _config: &MachineConfiguration) -> Result<()> {
+    async fn patch_machine_configuration(&mut self, _config: &MachineConfiguration) -> Result<()> {
         Ok(())
     }
 
-    fn get_machine_configuration(&mut self) -> Result<MachineConfiguration> {
+    async fn get_machine_configuration(&mut self) -> Result<MachineConfiguration> {
         Ok(MachineConfiguration::default())
     }
 
-    fn put_guest_boot_source(&mut self, _boot_source: &BootSource) -> Result<()> {
+    async fn put_guest_boot_source(&mut self, _boot_source: &BootSource) -> Result<()> {
         Ok(())
     }
 
-    fn put_cpu_configuration(&mut self, _config: &CpuConfig) -> Result<()> {
+    async fn put_cpu_configuration(&mut self, _config: &CpuConfig) -> Result<()> {
         Ok(())
     }
 
-    fn put_entropy_device(&mut self, _device: &EntropyDevice) -> Result<()> {
+    async fn put_entropy_device(&mut self, _device: &EntropyDevice) -> Result<()> {
         Ok(())
     }
 
-    fn put_guest_drive_by_id(&mut self, _drive_id: &str, _drive: &Drive) -> Result<()> {
+    async fn put_guest_drive_by_id(&mut self, _drive_id: &str, _drive: &Drive) -> Result<()> {
         Ok(())
     }
 
-    fn patch_guest_drive_by_id(&mut self, _drive_id: &str, _drive: &PartialDrive) -> Result<()> {
+    async fn patch_guest_drive_by_id(
+        &mut self,
+        _drive_id: &str,
+        _drive: &PartialDrive,
+    ) -> Result<()> {
         Ok(())
     }
 
-    fn put_guest_network_interface_by_id(
+    async fn put_guest_network_interface_by_id(
         &mut self,
         _iface_id: &str,
         _iface: &NetworkInterfaceModel,
@@ -68,7 +75,7 @@ pub trait ClientOps: Send {
         Ok(())
     }
 
-    fn patch_guest_network_interface_by_id(
+    async fn patch_guest_network_interface_by_id(
         &mut self,
         _iface_id: &str,
         _iface: &PartialNetworkInterface,
@@ -76,70 +83,70 @@ pub trait ClientOps: Send {
         Ok(())
     }
 
-    fn put_guest_vsock(&mut self, _vsock: &VsockModel) -> Result<()> {
+    async fn put_guest_vsock(&mut self, _vsock: &VsockModel) -> Result<()> {
         Ok(())
     }
 
-    fn patch_vm(&mut self, _vm: &Vm) -> Result<()> {
+    async fn patch_vm(&mut self, _vm: &Vm) -> Result<()> {
         Ok(())
     }
 
-    fn create_snapshot(&mut self, _snapshot: &SnapshotCreateParams) -> Result<()> {
+    async fn create_snapshot(&mut self, _snapshot: &SnapshotCreateParams) -> Result<()> {
         Ok(())
     }
 
-    fn load_snapshot(&mut self, _snapshot: &SnapshotLoadParams) -> Result<()> {
+    async fn load_snapshot(&mut self, _snapshot: &SnapshotLoadParams) -> Result<()> {
         Ok(())
     }
 
-    fn create_sync_action(&mut self, _action: &InstanceActionInfo) -> Result<()> {
+    async fn create_sync_action(&mut self, _action: &InstanceActionInfo) -> Result<()> {
         Ok(())
     }
 
-    fn put_mmds(&mut self, _metadata: &serde_json::Value) -> Result<()> {
+    async fn put_mmds(&mut self, _metadata: &serde_json::Value) -> Result<()> {
         Ok(())
     }
 
-    fn get_mmds(&mut self) -> Result<serde_json::Value> {
+    async fn get_mmds(&mut self) -> Result<serde_json::Value> {
         Ok(serde_json::json!({}))
     }
 
-    fn patch_mmds(&mut self, _metadata: &serde_json::Value) -> Result<()> {
+    async fn patch_mmds(&mut self, _metadata: &serde_json::Value) -> Result<()> {
         Ok(())
     }
 
-    fn put_mmds_config(&mut self, _config: &MmdsConfig) -> Result<()> {
+    async fn put_mmds_config(&mut self, _config: &MmdsConfig) -> Result<()> {
         Ok(())
     }
 
-    fn describe_instance(&mut self) -> Result<InstanceInfo> {
+    async fn describe_instance(&mut self) -> Result<InstanceInfo> {
         Ok(InstanceInfo::default())
     }
 
-    fn put_balloon(&mut self, _balloon: &Balloon) -> Result<()> {
+    async fn put_balloon(&mut self, _balloon: &Balloon) -> Result<()> {
         Ok(())
     }
 
-    fn get_balloon_config(&mut self) -> Result<Balloon> {
+    async fn get_balloon_config(&mut self) -> Result<Balloon> {
         Ok(Balloon::default())
     }
 
-    fn patch_balloon(&mut self, _balloon_update: &BalloonUpdate) -> Result<()> {
+    async fn patch_balloon(&mut self, _balloon_update: &BalloonUpdate) -> Result<()> {
         Ok(())
     }
 
-    fn get_balloon_stats(&mut self) -> Result<BalloonStats> {
+    async fn get_balloon_stats(&mut self) -> Result<BalloonStats> {
         Ok(BalloonStats::default())
     }
 
-    fn patch_balloon_stats_interval(
+    async fn patch_balloon_stats_interval(
         &mut self,
         _balloon_stats_update: &BalloonStatsUpdate,
     ) -> Result<()> {
         Ok(())
     }
 
-    fn get_export_vm_config(&mut self) -> Result<FullVmConfiguration> {
+    async fn get_export_vm_config(&mut self) -> Result<FullVmConfiguration> {
         Ok(FullVmConfiguration::default())
     }
 }
@@ -186,20 +193,25 @@ impl Client {
         self.init_timeout
     }
 
-    pub fn raw_request(&self, method: &str, path: &str, body: Option<&[u8]>) -> Result<Vec<u8>> {
-        self.transport.raw_request(method, path, body)
+    pub async fn raw_request(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<&[u8]>,
+    ) -> Result<Vec<u8>> {
+        self.transport.raw_request(method, path, body).await
     }
 
-    pub fn raw_json_request<T: serde::Serialize>(
+    pub async fn raw_json_request<T: serde::Serialize>(
         &self,
         method: &str,
         path: &str,
         body: &T,
     ) -> Result<Vec<u8>> {
-        self.transport.raw_json_request(method, path, body)
+        self.transport.raw_json_request(method, path, body).await
     }
 
-    fn raw_json_request_with_timeouts<T: serde::Serialize>(
+    async fn raw_json_request_with_timeouts<T: serde::Serialize>(
         &self,
         method: &str,
         path: &str,
@@ -207,59 +219,64 @@ impl Client {
         read_timeout: Option<Duration>,
         write_timeout: Option<Duration>,
     ) -> Result<Vec<u8>> {
-        self.transport.raw_json_request_with_timeouts(
-            method,
-            path,
-            body,
-            read_timeout,
-            write_timeout,
-        )
+        self.transport
+            .raw_json_request_with_timeouts(method, path, body, read_timeout, write_timeout)
+            .await
     }
 
-    pub fn get_firecracker_version(&self) -> Result<FirecrackerVersion> {
-        let body = self.raw_request("GET", "/version", None)?;
+    pub async fn get_firecracker_version(&self) -> Result<FirecrackerVersion> {
+        let body = self.raw_request("GET", "/version", None).await?;
         Ok(serde_json::from_slice(&body)?)
     }
 
-    pub fn put_logger(&self, logger: &Logger) -> Result<()> {
-        self.raw_json_request("PUT", "/logger", logger).map(|_| ())
+    pub async fn put_logger(&self, logger: &Logger) -> Result<()> {
+        self.raw_json_request("PUT", "/logger", logger)
+            .await
+            .map(|_| ())
     }
 
-    pub fn put_metrics(&self, metrics: &Metrics) -> Result<()> {
+    pub async fn put_metrics(&self, metrics: &Metrics) -> Result<()> {
         self.raw_json_request("PUT", "/metrics", metrics)
+            .await
             .map(|_| ())
     }
 
-    pub fn put_machine_configuration(&self, config: &MachineConfiguration) -> Result<()> {
+    pub async fn put_machine_configuration(&self, config: &MachineConfiguration) -> Result<()> {
         self.raw_json_request("PUT", "/machine-config", config)
+            .await
             .map(|_| ())
     }
 
-    pub fn patch_machine_configuration(&self, config: &MachineConfiguration) -> Result<()> {
+    pub async fn patch_machine_configuration(&self, config: &MachineConfiguration) -> Result<()> {
         self.raw_json_request("PATCH", "/machine-config", config)
+            .await
             .map(|_| ())
     }
 
-    pub fn get_machine_configuration(&self) -> Result<MachineConfiguration> {
-        let body = self.raw_request("GET", "/machine-config", None)?;
+    pub async fn get_machine_configuration(&self) -> Result<MachineConfiguration> {
+        let body = self.raw_request("GET", "/machine-config", None).await?;
         Ok(serde_json::from_slice(&body)?)
     }
 
-    pub fn put_guest_boot_source(&self, boot_source: &BootSource) -> Result<()> {
+    pub async fn put_guest_boot_source(&self, boot_source: &BootSource) -> Result<()> {
         self.raw_json_request("PUT", "/boot-source", boot_source)
+            .await
             .map(|_| ())
     }
 
-    pub fn put_cpu_configuration(&self, config: &CpuConfig) -> Result<()> {
+    pub async fn put_cpu_configuration(&self, config: &CpuConfig) -> Result<()> {
         self.raw_json_request("PUT", "/cpu-config", config)
+            .await
             .map(|_| ())
     }
 
-    pub fn put_entropy_device(&self, device: &EntropyDevice) -> Result<()> {
-        self.raw_json_request("PUT", "/entropy", device).map(|_| ())
+    pub async fn put_entropy_device(&self, device: &EntropyDevice) -> Result<()> {
+        self.raw_json_request("PUT", "/entropy", device)
+            .await
+            .map(|_| ())
     }
 
-    pub fn put_guest_drive_by_id(&self, drive_id: &str, drive: &Drive) -> Result<()> {
+    pub async fn put_guest_drive_by_id(&self, drive_id: &str, drive: &Drive) -> Result<()> {
         let timeout = self.drive_request_timeout();
         self.raw_json_request_with_timeouts(
             "PUT",
@@ -268,41 +285,51 @@ impl Client {
             Some(timeout),
             Some(timeout),
         )
+        .await
         .map(|_| ())
     }
 
-    pub fn patch_guest_drive_by_id(&self, drive_id: &str, drive: &PartialDrive) -> Result<()> {
+    pub async fn patch_guest_drive_by_id(
+        &self,
+        drive_id: &str,
+        drive: &PartialDrive,
+    ) -> Result<()> {
         self.raw_json_request("PATCH", &format!("/drives/{drive_id}"), drive)
+            .await
             .map(|_| ())
     }
 
-    pub fn put_guest_network_interface_by_id(
+    pub async fn put_guest_network_interface_by_id(
         &self,
         iface_id: &str,
         iface: &NetworkInterfaceModel,
     ) -> Result<()> {
         self.raw_json_request("PUT", &format!("/network-interfaces/{iface_id}"), iface)
+            .await
             .map(|_| ())
     }
 
-    pub fn patch_guest_network_interface_by_id(
+    pub async fn patch_guest_network_interface_by_id(
         &self,
         iface_id: &str,
         iface: &PartialNetworkInterface,
     ) -> Result<()> {
         self.raw_json_request("PATCH", &format!("/network-interfaces/{iface_id}"), iface)
+            .await
             .map(|_| ())
     }
 
-    pub fn put_guest_vsock(&self, vsock: &VsockModel) -> Result<()> {
-        self.raw_json_request("PUT", "/vsock", vsock).map(|_| ())
+    pub async fn put_guest_vsock(&self, vsock: &VsockModel) -> Result<()> {
+        self.raw_json_request("PUT", "/vsock", vsock)
+            .await
+            .map(|_| ())
     }
 
-    pub fn patch_vm(&self, vm: &Vm) -> Result<()> {
-        self.raw_json_request("PATCH", "/vm", vm).map(|_| ())
+    pub async fn patch_vm(&self, vm: &Vm) -> Result<()> {
+        self.raw_json_request("PATCH", "/vm", vm).await.map(|_| ())
     }
 
-    pub fn create_snapshot(&self, snapshot: &SnapshotCreateParams) -> Result<()> {
+    pub async fn create_snapshot(&self, snapshot: &SnapshotCreateParams) -> Result<()> {
         self.raw_json_request_with_timeouts(
             "PUT",
             "/snapshot/create",
@@ -310,10 +337,11 @@ impl Client {
             None,
             Some(self.request_timeout()),
         )
+        .await
         .map(|_| ())
     }
 
-    pub fn load_snapshot(&self, snapshot: &SnapshotLoadParams) -> Result<()> {
+    pub async fn load_snapshot(&self, snapshot: &SnapshotLoadParams) -> Result<()> {
         self.raw_json_request_with_timeouts(
             "PUT",
             "/snapshot/load",
@@ -321,213 +349,229 @@ impl Client {
             None,
             Some(self.request_timeout()),
         )
+        .await
         .map(|_| ())
     }
 
-    pub fn create_sync_action(&self, action: &InstanceActionInfo) -> Result<()> {
-        self.raw_json_request("PUT", "/actions", action).map(|_| ())
+    pub async fn create_sync_action(&self, action: &InstanceActionInfo) -> Result<()> {
+        self.raw_json_request("PUT", "/actions", action)
+            .await
+            .map(|_| ())
     }
 
-    pub fn put_mmds(&self, metadata: &serde_json::Value) -> Result<()> {
-        self.raw_json_request("PUT", "/mmds", metadata).map(|_| ())
+    pub async fn put_mmds(&self, metadata: &serde_json::Value) -> Result<()> {
+        self.raw_json_request("PUT", "/mmds", metadata)
+            .await
+            .map(|_| ())
     }
 
-    pub fn get_mmds(&self) -> Result<serde_json::Value> {
-        let body = self.raw_request("GET", "/mmds", None)?;
+    pub async fn get_mmds(&self) -> Result<serde_json::Value> {
+        let body = self.raw_request("GET", "/mmds", None).await?;
         Ok(serde_json::from_slice(&body)?)
     }
 
-    pub fn patch_mmds(&self, metadata: &serde_json::Value) -> Result<()> {
+    pub async fn patch_mmds(&self, metadata: &serde_json::Value) -> Result<()> {
         self.raw_json_request("PATCH", "/mmds", metadata)
+            .await
             .map(|_| ())
     }
 
-    pub fn put_mmds_config(&self, config: &MmdsConfig) -> Result<()> {
+    pub async fn put_mmds_config(&self, config: &MmdsConfig) -> Result<()> {
         self.raw_json_request("PUT", "/mmds/config", config)
+            .await
             .map(|_| ())
     }
 
-    pub fn describe_instance(&self) -> Result<InstanceInfo> {
-        let body = self.raw_request("GET", "/", None)?;
+    pub async fn describe_instance(&self) -> Result<InstanceInfo> {
+        let body = self.raw_request("GET", "/", None).await?;
         Ok(serde_json::from_slice(&body)?)
     }
 
-    pub fn get_instance_info(&self) -> Result<InstanceInfo> {
-        self.describe_instance()
+    pub async fn get_instance_info(&self) -> Result<InstanceInfo> {
+        self.describe_instance().await
     }
 
-    pub fn put_balloon(&self, balloon: &Balloon) -> Result<()> {
+    pub async fn put_balloon(&self, balloon: &Balloon) -> Result<()> {
         self.raw_json_request("PUT", "/balloon", balloon)
+            .await
             .map(|_| ())
     }
 
-    pub fn get_balloon_config(&self) -> Result<Balloon> {
-        let body = self.raw_request("GET", "/balloon", None)?;
+    pub async fn get_balloon_config(&self) -> Result<Balloon> {
+        let body = self.raw_request("GET", "/balloon", None).await?;
         Ok(serde_json::from_slice(&body)?)
     }
 
-    pub fn describe_balloon_config(&self) -> Result<Balloon> {
-        self.get_balloon_config()
+    pub async fn describe_balloon_config(&self) -> Result<Balloon> {
+        self.get_balloon_config().await
     }
 
-    pub fn patch_balloon(&self, balloon_update: &BalloonUpdate) -> Result<()> {
+    pub async fn patch_balloon(&self, balloon_update: &BalloonUpdate) -> Result<()> {
         self.raw_json_request("PATCH", "/balloon", balloon_update)
+            .await
             .map(|_| ())
     }
 
-    pub fn get_balloon_stats(&self) -> Result<BalloonStats> {
-        let body = self.raw_request("GET", "/balloon/statistics", None)?;
+    pub async fn get_balloon_stats(&self) -> Result<BalloonStats> {
+        let body = self.raw_request("GET", "/balloon/statistics", None).await?;
         Ok(serde_json::from_slice(&body)?)
     }
 
-    pub fn describe_balloon_stats(&self) -> Result<BalloonStats> {
-        self.get_balloon_stats()
+    pub async fn describe_balloon_stats(&self) -> Result<BalloonStats> {
+        self.get_balloon_stats().await
     }
 
-    pub fn patch_balloon_stats_interval(
+    pub async fn patch_balloon_stats_interval(
         &self,
         balloon_stats_update: &BalloonStatsUpdate,
     ) -> Result<()> {
         self.raw_json_request("PATCH", "/balloon/statistics", balloon_stats_update)
+            .await
             .map(|_| ())
     }
 
-    pub fn get_export_vm_config(&self) -> Result<FullVmConfiguration> {
-        let body = self.raw_request("GET", "/vm/config", None)?;
+    pub async fn get_export_vm_config(&self) -> Result<FullVmConfiguration> {
+        let body = self.raw_request("GET", "/vm/config", None).await?;
         Ok(serde_json::from_slice(&body)?)
     }
 }
 
+#[async_trait]
 impl ClientOps for Client {
-    fn get_firecracker_version(&mut self) -> Result<FirecrackerVersion> {
-        Client::get_firecracker_version(self)
+    async fn get_firecracker_version(&mut self) -> Result<FirecrackerVersion> {
+        Client::get_firecracker_version(self).await
     }
 
-    fn put_logger(&mut self, logger: &Logger) -> Result<()> {
-        Client::put_logger(self, logger)
+    async fn put_logger(&mut self, logger: &Logger) -> Result<()> {
+        Client::put_logger(self, logger).await
     }
 
-    fn put_metrics(&mut self, metrics: &Metrics) -> Result<()> {
-        Client::put_metrics(self, metrics)
+    async fn put_metrics(&mut self, metrics: &Metrics) -> Result<()> {
+        Client::put_metrics(self, metrics).await
     }
 
-    fn put_machine_configuration(&mut self, config: &MachineConfiguration) -> Result<()> {
-        Client::put_machine_configuration(self, config)
+    async fn put_machine_configuration(&mut self, config: &MachineConfiguration) -> Result<()> {
+        Client::put_machine_configuration(self, config).await
     }
 
-    fn patch_machine_configuration(&mut self, config: &MachineConfiguration) -> Result<()> {
-        Client::patch_machine_configuration(self, config)
+    async fn patch_machine_configuration(&mut self, config: &MachineConfiguration) -> Result<()> {
+        Client::patch_machine_configuration(self, config).await
     }
 
-    fn get_machine_configuration(&mut self) -> Result<MachineConfiguration> {
-        Client::get_machine_configuration(self)
+    async fn get_machine_configuration(&mut self) -> Result<MachineConfiguration> {
+        Client::get_machine_configuration(self).await
     }
 
-    fn put_guest_boot_source(&mut self, boot_source: &BootSource) -> Result<()> {
-        Client::put_guest_boot_source(self, boot_source)
+    async fn put_guest_boot_source(&mut self, boot_source: &BootSource) -> Result<()> {
+        Client::put_guest_boot_source(self, boot_source).await
     }
 
-    fn put_cpu_configuration(&mut self, config: &CpuConfig) -> Result<()> {
-        Client::put_cpu_configuration(self, config)
+    async fn put_cpu_configuration(&mut self, config: &CpuConfig) -> Result<()> {
+        Client::put_cpu_configuration(self, config).await
     }
 
-    fn put_entropy_device(&mut self, device: &EntropyDevice) -> Result<()> {
-        Client::put_entropy_device(self, device)
+    async fn put_entropy_device(&mut self, device: &EntropyDevice) -> Result<()> {
+        Client::put_entropy_device(self, device).await
     }
 
-    fn put_guest_drive_by_id(&mut self, drive_id: &str, drive: &Drive) -> Result<()> {
-        Client::put_guest_drive_by_id(self, drive_id, drive)
+    async fn put_guest_drive_by_id(&mut self, drive_id: &str, drive: &Drive) -> Result<()> {
+        Client::put_guest_drive_by_id(self, drive_id, drive).await
     }
 
-    fn patch_guest_drive_by_id(&mut self, drive_id: &str, drive: &PartialDrive) -> Result<()> {
-        Client::patch_guest_drive_by_id(self, drive_id, drive)
+    async fn patch_guest_drive_by_id(
+        &mut self,
+        drive_id: &str,
+        drive: &PartialDrive,
+    ) -> Result<()> {
+        Client::patch_guest_drive_by_id(self, drive_id, drive).await
     }
 
-    fn put_guest_network_interface_by_id(
+    async fn put_guest_network_interface_by_id(
         &mut self,
         iface_id: &str,
         iface: &NetworkInterfaceModel,
     ) -> Result<()> {
-        Client::put_guest_network_interface_by_id(self, iface_id, iface)
+        Client::put_guest_network_interface_by_id(self, iface_id, iface).await
     }
 
-    fn patch_guest_network_interface_by_id(
+    async fn patch_guest_network_interface_by_id(
         &mut self,
         iface_id: &str,
         iface: &PartialNetworkInterface,
     ) -> Result<()> {
-        Client::patch_guest_network_interface_by_id(self, iface_id, iface)
+        Client::patch_guest_network_interface_by_id(self, iface_id, iface).await
     }
 
-    fn put_guest_vsock(&mut self, vsock: &VsockModel) -> Result<()> {
-        Client::put_guest_vsock(self, vsock)
+    async fn put_guest_vsock(&mut self, vsock: &VsockModel) -> Result<()> {
+        Client::put_guest_vsock(self, vsock).await
     }
 
-    fn patch_vm(&mut self, vm: &Vm) -> Result<()> {
-        Client::patch_vm(self, vm)
+    async fn patch_vm(&mut self, vm: &Vm) -> Result<()> {
+        Client::patch_vm(self, vm).await
     }
 
-    fn create_snapshot(&mut self, snapshot: &SnapshotCreateParams) -> Result<()> {
-        Client::create_snapshot(self, snapshot)
+    async fn create_snapshot(&mut self, snapshot: &SnapshotCreateParams) -> Result<()> {
+        Client::create_snapshot(self, snapshot).await
     }
 
-    fn load_snapshot(&mut self, snapshot: &SnapshotLoadParams) -> Result<()> {
-        Client::load_snapshot(self, snapshot)
+    async fn load_snapshot(&mut self, snapshot: &SnapshotLoadParams) -> Result<()> {
+        Client::load_snapshot(self, snapshot).await
     }
 
-    fn create_sync_action(&mut self, action: &InstanceActionInfo) -> Result<()> {
-        Client::create_sync_action(self, action)
+    async fn create_sync_action(&mut self, action: &InstanceActionInfo) -> Result<()> {
+        Client::create_sync_action(self, action).await
     }
 
-    fn put_mmds(&mut self, metadata: &serde_json::Value) -> Result<()> {
-        Client::put_mmds(self, metadata)
+    async fn put_mmds(&mut self, metadata: &serde_json::Value) -> Result<()> {
+        Client::put_mmds(self, metadata).await
     }
 
-    fn get_mmds(&mut self) -> Result<serde_json::Value> {
-        Client::get_mmds(self)
+    async fn get_mmds(&mut self) -> Result<serde_json::Value> {
+        Client::get_mmds(self).await
     }
 
-    fn patch_mmds(&mut self, metadata: &serde_json::Value) -> Result<()> {
-        Client::patch_mmds(self, metadata)
+    async fn patch_mmds(&mut self, metadata: &serde_json::Value) -> Result<()> {
+        Client::patch_mmds(self, metadata).await
     }
 
-    fn put_mmds_config(&mut self, config: &MmdsConfig) -> Result<()> {
-        Client::put_mmds_config(self, config)
+    async fn put_mmds_config(&mut self, config: &MmdsConfig) -> Result<()> {
+        Client::put_mmds_config(self, config).await
     }
 
-    fn describe_instance(&mut self) -> Result<InstanceInfo> {
-        Client::describe_instance(self)
+    async fn describe_instance(&mut self) -> Result<InstanceInfo> {
+        Client::describe_instance(self).await
     }
 
-    fn put_balloon(&mut self, balloon: &Balloon) -> Result<()> {
-        Client::put_balloon(self, balloon)
+    async fn put_balloon(&mut self, balloon: &Balloon) -> Result<()> {
+        Client::put_balloon(self, balloon).await
     }
 
-    fn get_balloon_config(&mut self) -> Result<Balloon> {
-        Client::get_balloon_config(self)
+    async fn get_balloon_config(&mut self) -> Result<Balloon> {
+        Client::get_balloon_config(self).await
     }
 
-    fn patch_balloon(&mut self, balloon_update: &BalloonUpdate) -> Result<()> {
-        Client::patch_balloon(self, balloon_update)
+    async fn patch_balloon(&mut self, balloon_update: &BalloonUpdate) -> Result<()> {
+        Client::patch_balloon(self, balloon_update).await
     }
 
-    fn get_balloon_stats(&mut self) -> Result<BalloonStats> {
-        Client::get_balloon_stats(self)
+    async fn get_balloon_stats(&mut self) -> Result<BalloonStats> {
+        Client::get_balloon_stats(self).await
     }
 
-    fn patch_balloon_stats_interval(
+    async fn patch_balloon_stats_interval(
         &mut self,
         balloon_stats_update: &BalloonStatsUpdate,
     ) -> Result<()> {
-        Client::patch_balloon_stats_interval(self, balloon_stats_update)
+        Client::patch_balloon_stats_interval(self, balloon_stats_update).await
     }
 
-    fn get_export_vm_config(&mut self) -> Result<FullVmConfiguration> {
-        Client::get_export_vm_config(self)
+    async fn get_export_vm_config(&mut self) -> Result<FullVmConfiguration> {
+        Client::get_export_vm_config(self).await
     }
 }
 
 #[derive(Debug, Default)]
 pub struct NoopClient;
 
+#[async_trait]
 impl ClientOps for NoopClient {}

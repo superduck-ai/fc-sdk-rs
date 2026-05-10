@@ -3,7 +3,8 @@ mod real_vm_support;
 use std::path::Path;
 
 use firecracker_sdk::{
-    Config, MachineConfiguration, VMCommandBuilder, new_machine, with_process_runner, with_snapshot,
+    AsyncResultExt, Config, MachineConfiguration, VMCommandBuilder, new_machine,
+    with_process_runner, with_snapshot,
 };
 
 fn make_vm_command(socket_path: &Path, vmid: &str) -> firecracker_sdk::VMCommand {

@@ -2,8 +2,8 @@ use std::fs;
 
 use firecracker_sdk::fctesting::MockClient;
 use firecracker_sdk::{
-    CommandStdio, Config, MachineConfiguration, VMCommandBuilder, new_machine, with_client,
-    with_process_runner,
+    AsyncResultExt, CommandStdio, Config, MachineConfiguration, VMCommandBuilder, new_machine,
+    with_client, with_process_runner,
 };
 
 #[test]

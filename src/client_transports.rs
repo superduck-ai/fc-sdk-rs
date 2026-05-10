@@ -1,8 +1,10 @@
-use std::io::{Read, Write};
-use std::os::unix::net::UnixStream;
+use std::io;
 use std::time::Duration;
 
 use serde::Serialize;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::UnixStream;
+use tokio::time;
 
 use crate::error::{Error, Result};
 
@@ -28,7 +30,12 @@ impl UnixSocketTransport {
         self.request_timeout
     }
 
-    pub fn raw_request(&self, method: &str, path: &str, body: Option<&[u8]>) -> Result<Vec<u8>> {
+    pub async fn raw_request(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<&[u8]>,
+    ) -> Result<Vec<u8>> {
         self.raw_request_with_timeouts(
             method,
             path,
@@ -36,9 +43,10 @@ impl UnixSocketTransport {
             Some(self.request_timeout),
             Some(self.request_timeout),
         )
+        .await
     }
 
-    pub fn raw_request_with_timeouts(
+    pub async fn raw_request_with_timeouts(
         &self,
         method: &str,
         path: &str,
@@ -46,10 +54,7 @@ impl UnixSocketTransport {
         read_timeout: Option<Duration>,
         write_timeout: Option<Duration>,
     ) -> Result<Vec<u8>> {
-        let mut stream = UnixStream::connect(&self.socket_path)?;
-        stream.set_read_timeout(read_timeout)?;
-        stream.set_write_timeout(write_timeout)?;
-        let read_timeout_configured = read_timeout.is_some();
+        let mut stream = UnixStream::connect(&self.socket_path).await?;
 
         let body = body.unwrap_or_default();
         let mut request = format!(
@@ -61,18 +66,16 @@ impl UnixSocketTransport {
         }
         request.push_str("\r\n");
 
-        stream.write_all(request.as_bytes())?;
+        write_all_with_timeout(&mut stream, request.as_bytes(), write_timeout).await?;
         if !body.is_empty() {
-            stream.write_all(body)?;
+            write_all_with_timeout(&mut stream, body, write_timeout).await?;
         }
 
         let mut response = Vec::new();
         let delimiter = b"\r\n\r\n";
         let header_end = loop {
             let mut chunk = [0u8; 1024];
-            let read = stream
-                .read(&mut chunk)
-                .map_err(|error| normalize_timeout_error(error, read_timeout_configured))?;
+            let read = read_with_timeout(&mut stream, &mut chunk, read_timeout).await?;
             if read == 0 {
                 return Err(Error::Api {
                     status: 0,
@@ -102,9 +105,7 @@ impl UnixSocketTransport {
         if let Some(content_length) = content_length {
             while body.len() < content_length {
                 let mut chunk = vec![0u8; content_length - body.len()];
-                let read = stream
-                    .read(&mut chunk)
-                    .map_err(|error| normalize_timeout_error(error, read_timeout_configured))?;
+                let read = read_with_timeout(&mut stream, &mut chunk, read_timeout).await?;
                 if read == 0 {
                     break;
                 }
@@ -120,9 +121,7 @@ impl UnixSocketTransport {
 
         loop {
             let mut chunk = [0u8; 1024];
-            let read = stream
-                .read(&mut chunk)
-                .map_err(|error| normalize_timeout_error(error, read_timeout_configured))?;
+            let read = read_with_timeout(&mut stream, &mut chunk, read_timeout).await?;
             if read == 0 {
                 break;
             }
@@ -132,7 +131,7 @@ impl UnixSocketTransport {
         parse_http_response(head, &body)
     }
 
-    pub fn raw_json_request<T: Serialize>(
+    pub async fn raw_json_request<T: Serialize>(
         &self,
         method: &str,
         path: &str,
@@ -145,9 +144,10 @@ impl UnixSocketTransport {
             Some(self.request_timeout),
             Some(self.request_timeout),
         )
+        .await
     }
 
-    pub fn raw_json_request_with_timeouts<T: Serialize>(
+    pub async fn raw_json_request_with_timeouts<T: Serialize>(
         &self,
         method: &str,
         path: &str,
@@ -157,6 +157,7 @@ impl UnixSocketTransport {
     ) -> Result<Vec<u8>> {
         let encoded = serde_json::to_vec(body)?;
         self.raw_request_with_timeouts(method, path, Some(&encoded), read_timeout, write_timeout)
+            .await
     }
 }
 
@@ -209,15 +210,37 @@ fn response_must_not_have_body(method: &str, status: u16) -> bool {
         || (100..200).contains(&status)
 }
 
-fn normalize_timeout_error(error: std::io::Error, timeout_configured: bool) -> std::io::Error {
-    if timeout_configured
-        && matches!(
-            error.kind(),
-            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
-        )
-    {
-        std::io::Error::new(std::io::ErrorKind::TimedOut, error.to_string())
-    } else {
-        error
+async fn read_with_timeout(
+    stream: &mut UnixStream,
+    buffer: &mut [u8],
+    timeout: Option<Duration>,
+) -> io::Result<usize> {
+    run_with_timeout(timeout, "read", async { stream.read(buffer).await }).await
+}
+
+async fn write_all_with_timeout(
+    stream: &mut UnixStream,
+    buffer: &[u8],
+    timeout: Option<Duration>,
+) -> io::Result<()> {
+    run_with_timeout(timeout, "write", async { stream.write_all(buffer).await }).await
+}
+
+async fn run_with_timeout<F, T>(
+    timeout: Option<Duration>,
+    operation: &str,
+    future: F,
+) -> io::Result<T>
+where
+    F: std::future::Future<Output = io::Result<T>>,
+{
+    match timeout {
+        Some(duration) => time::timeout(duration, future).await.map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!("{operation} timed out after {:?}", duration),
+            )
+        })?,
+        None => future.await,
     }
 }

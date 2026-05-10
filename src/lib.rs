@@ -9,8 +9,8 @@
 //! Process runner logging:
 //! ```no_run
 //! use firecracker_sdk::{
-//!     Config, DrivesBuilder, MachineConfiguration, VMCommandBuilder, new_machine,
-//!     with_process_runner,
+//!     AsyncResultExt, Config, DrivesBuilder, MachineConfiguration, VMCommandBuilder,
+//!     new_machine, with_process_runner,
 //! };
 //!
 //! let socket_path = "/tmp/firecracker.sock";
@@ -38,7 +38,7 @@
 //!
 //! Building a drive list:
 //! ```no_run
-//! use firecracker_sdk::{Config, DrivesBuilder, MachineConfiguration, Machine};
+//! use firecracker_sdk::{AsyncResultExt, Config, DrivesBuilder, MachineConfiguration, Machine};
 //!
 //! let drives = DrivesBuilder::new("/path/to/rootfs")
 //!     .add_drive("/first/path/drive.img", true, std::iter::empty())
@@ -62,8 +62,8 @@
 //! use std::time::Duration;
 //!
 //! use firecracker_sdk::{
-//!     Config, DrivesBuilder, Machine, MachineConfiguration, TokenBucketBuilder, new_rate_limiter,
-//!     with_rate_limiter,
+//!     AsyncResultExt, Config, DrivesBuilder, Machine, MachineConfiguration, TokenBucketBuilder,
+//!     new_rate_limiter, with_rate_limiter,
 //! };
 //!
 //! let limiter = new_rate_limiter(
@@ -102,8 +102,8 @@
 //! use std::time::Duration;
 //!
 //! use firecracker_sdk::{
-//!     Config, DrivesBuilder, Machine, MachineConfiguration, NetworkInterface, NetworkInterfaces,
-//!     StaticNetworkConfiguration, TokenBucketBuilder, new_rate_limiter,
+//!     AsyncResultExt, Config, DrivesBuilder, Machine, MachineConfiguration, NetworkInterface,
+//!     NetworkInterfaces, StaticNetworkConfiguration, TokenBucketBuilder, new_rate_limiter,
 //! };
 //!
 //! let inbound = new_rate_limiter(
@@ -161,7 +161,8 @@
 //! use std::sync::Arc;
 //!
 //! use firecracker_sdk::{
-//!     Config, DrivesBuilder, JailerConfig, Machine, MachineConfiguration, NaiveChrootStrategy,
+//!     AsyncResultExt, Config, DrivesBuilder, JailerConfig, Machine, MachineConfiguration,
+//!     NaiveChrootStrategy,
 //! };
 //!
 //! let kernel_image_path = "/path/to/kernel-image";
@@ -234,6 +235,7 @@ pub use drives::{
     with_partuuid, with_rate_limiter, with_read_only,
 };
 pub use error::{Error, Result};
+pub use fctesting::{AsyncResultExt, BlockingFutureExt};
 pub use handlers::{
     ADD_VSOCKS_HANDLER_NAME, ATTACH_DRIVES_HANDLER_NAME, BOOTSTRAP_LOGGING_HANDLER_NAME,
     CONFIG_MMDS_HANDLER_NAME, CREATE_BOOT_SOURCE_HANDLER_NAME, CREATE_LOG_FILES_HANDLER_NAME,

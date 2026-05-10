@@ -13,7 +13,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use firecracker_sdk::{
-    Config, IPConfiguration, MMDSVersion, MachineConfiguration, NetworkInterface,
+    AsyncResultExt, Config, IPConfiguration, MMDSVersion, MachineConfiguration, NetworkInterface,
     NetworkInterfaces, StaticNetworkConfiguration, VMCommandBuilder, new_machine,
     with_process_runner, with_read_only,
 };

@@ -7,9 +7,9 @@ use std::time::{Duration, Instant};
 
 use firecracker_sdk::fctesting::MockClient;
 use firecracker_sdk::{
-    Config, FifoLogWriter, Handler, HandlerList, MMDSVersion, Machine, MachineConfiguration,
-    NetworkInterface, NoopClient, StaticNetworkConfiguration, VsockDevice, add_vsocks_handler,
-    attach_drives_handler, bootstrap_logging_handler, config_mmds_handler,
+    AsyncResultExt, Config, FifoLogWriter, Handler, HandlerList, MMDSVersion, Machine,
+    MachineConfiguration, NetworkInterface, NoopClient, StaticNetworkConfiguration, VsockDevice,
+    add_vsocks_handler, attach_drives_handler, bootstrap_logging_handler, config_mmds_handler,
     create_boot_source_handler, create_log_files_handler, create_machine_handler,
     create_network_interfaces_handler, new_set_metadata_handler,
 };
@@ -129,38 +129,25 @@ fn TestHandlerListHas() {
 #[test]
 fn TestHandlerListSwappend() {
     let replacement = Handler::new("foo", |_| Ok(()));
+    let bar = Handler::new("bar", |_| Ok(()));
+    let foo_a = Handler::new("foo", |_| Ok(()));
+    let foo_b = Handler::new("foo", |_| Ok(()));
+
     let cases = vec![
         (
-            HandlerList::default().append([Handler::new("bar", |_| Ok(()))]),
+            HandlerList::default().append([bar.clone()]),
             replacement.clone(),
-            HandlerList::default().append([
-                Handler::new("bar", |_| Ok(())),
-                replacement.clone(),
-            ]),
+            HandlerList::default().append([bar.clone(), replacement.clone()]),
         ),
         (
-            HandlerList::default().append([
-                Handler::new("bar", |_| Ok(())),
-                Handler::new("foo", |_| Ok(())),
-            ]),
+            HandlerList::default().append([bar.clone(), foo_a.clone()]),
             replacement.clone(),
-            HandlerList::default().append([
-                Handler::new("bar", |_| Ok(())),
-                replacement.clone(),
-            ]),
+            HandlerList::default().append([bar.clone(), replacement.clone()]),
         ),
         (
-            HandlerList::default().append([
-                Handler::new("foo", |_| Ok(())),
-                Handler::new("bar", |_| Ok(())),
-                Handler::new("foo", |_| Ok(())),
-            ]),
+            HandlerList::default().append([foo_a.clone(), bar.clone(), foo_b.clone()]),
             replacement.clone(),
-            HandlerList::default().append([
-                replacement.clone(),
-                Handler::new("bar", |_| Ok(())),
-                replacement.clone(),
-            ]),
+            HandlerList::default().append([replacement.clone(), bar.clone(), replacement.clone()]),
         ),
     ];
 
@@ -173,35 +160,25 @@ fn TestHandlerListSwappend() {
 #[test]
 fn TestHandlerListReplace() {
     let replacement = Handler::new("foo", |_| Ok(()));
+    let bar = Handler::new("bar", |_| Ok(()));
+    let foo_a = Handler::new("foo", |_| Ok(()));
+    let foo_b = Handler::new("foo", |_| Ok(()));
+
     let cases = vec![
         (
-            HandlerList::default().append([Handler::new("bar", |_| Ok(()))]),
+            HandlerList::default().append([bar.clone()]),
             replacement.clone(),
-            HandlerList::default().append([Handler::new("bar", |_| Ok(()))]),
+            HandlerList::default().append([bar.clone()]),
         ),
         (
-            HandlerList::default().append([
-                Handler::new("bar", |_| Ok(())),
-                Handler::new("foo", |_| Ok(())),
-            ]),
+            HandlerList::default().append([bar.clone(), foo_a.clone()]),
             replacement.clone(),
-            HandlerList::default().append([
-                Handler::new("bar", |_| Ok(())),
-                replacement.clone(),
-            ]),
+            HandlerList::default().append([bar.clone(), replacement.clone()]),
         ),
         (
-            HandlerList::default().append([
-                Handler::new("foo", |_| Ok(())),
-                Handler::new("bar", |_| Ok(())),
-                Handler::new("foo", |_| Ok(())),
-            ]),
+            HandlerList::default().append([foo_a.clone(), bar.clone(), foo_b.clone()]),
             replacement.clone(),
-            HandlerList::default().append([
-                replacement.clone(),
-                Handler::new("bar", |_| Ok(())),
-                replacement.clone(),
-            ]),
+            HandlerList::default().append([replacement.clone(), bar.clone(), replacement.clone()]),
         ),
     ];
 
@@ -213,35 +190,23 @@ fn TestHandlerListReplace() {
 
 #[test]
 fn TestHandlerListAppendAfter() {
+    let foo = Handler::new("foo", |_| Ok(()));
+    let bar = Handler::new("bar", |_| Ok(()));
+    let baz = Handler::new("baz", |_| Ok(()));
+    let qux = Handler::new("qux", |_| Ok(()));
+
     let cases = vec![
         (
-            HandlerList::default().append([
-                Handler::new("foo", |_| Ok(())),
-                Handler::new("bar", |_| Ok(())),
-                Handler::new("baz", |_| Ok(())),
-            ]),
+            HandlerList::default().append([foo.clone(), bar.clone(), baz.clone()]),
             "not exist",
-            Handler::new("qux", |_| Ok(())),
-            HandlerList::default().append([
-                Handler::new("foo", |_| Ok(())),
-                Handler::new("bar", |_| Ok(())),
-                Handler::new("baz", |_| Ok(())),
-            ]),
+            qux.clone(),
+            HandlerList::default().append([foo.clone(), bar.clone(), baz.clone()]),
         ),
         (
-            HandlerList::default().append([
-                Handler::new("foo", |_| Ok(())),
-                Handler::new("bar", |_| Ok(())),
-                Handler::new("baz", |_| Ok(())),
-            ]),
+            HandlerList::default().append([foo.clone(), bar.clone(), baz.clone()]),
             "foo",
-            Handler::new("qux", |_| Ok(())),
-            HandlerList::default().append([
-                Handler::new("foo", |_| Ok(())),
-                Handler::new("qux", |_| Ok(())),
-                Handler::new("bar", |_| Ok(())),
-                Handler::new("baz", |_| Ok(())),
-            ]),
+            qux.clone(),
+            HandlerList::default().append([foo.clone(), qux.clone(), bar.clone(), baz.clone()]),
         ),
     ];
 

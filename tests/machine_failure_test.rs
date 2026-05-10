@@ -2,8 +2,9 @@ use std::sync::{LazyLock, Mutex};
 
 use firecracker_sdk::fctesting::MockClient;
 use firecracker_sdk::{
-    CommandStdio, Config, Error, FIRECRACKER_INIT_TIMEOUT_ENV, HandlerList, Machine,
-    MachineConfiguration, VMCommandBuilder, new_machine, with_client, with_process_runner,
+    AsyncResultExt, BlockingFutureExt, CommandStdio, Config, Error, FIRECRACKER_INIT_TIMEOUT_ENV,
+    HandlerList, Machine, MachineConfiguration, VMCommandBuilder, new_machine, with_client,
+    with_process_runner,
 };
 
 static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
@@ -53,7 +54,10 @@ fn test_start_returns_already_started_on_second_call() {
     machine.handlers.fc_init = HandlerList::default();
 
     machine.start().unwrap();
-    assert!(matches!(machine.start(), Err(Error::AlreadyStarted)));
+    assert!(matches!(
+        machine.start().block_on(),
+        Err(Error::AlreadyStarted)
+    ));
 }
 
 #[test]

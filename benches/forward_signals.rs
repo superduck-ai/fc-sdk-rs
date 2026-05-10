@@ -9,7 +9,8 @@ use std::time::{Duration, Instant};
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use firecracker_sdk::{
-    CommandStdio, Config, MachineConfiguration, VMCommandBuilder, new_machine, with_process_runner,
+    AsyncResultExt, BlockingFutureExt, CommandStdio, Config, MachineConfiguration,
+    VMCommandBuilder, new_machine, with_process_runner,
 };
 
 static VM_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -133,7 +134,7 @@ fn start_and_wait_vm(bench_name: &str, forward_signals: Option<Vec<i32>>) {
     machine.start().unwrap();
     wait_for_guest_boot(&log_path, &serial_path);
     machine.stop_vmm().unwrap();
-    let _ = machine.wait();
+    let _ = machine.wait().block_on();
     drop(temp_dir);
 }
 

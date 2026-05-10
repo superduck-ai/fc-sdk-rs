@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 
 use firecracker_sdk::fctesting::MockClient;
 use firecracker_sdk::{
-    CommandStdio, Config, MachineConfiguration, VMCommandBuilder, new_machine, with_client,
-    with_process_runner,
+    AsyncResultExt, CommandStdio, Config, MachineConfiguration, VMCommandBuilder, new_machine,
+    with_client, with_process_runner,
 };
 
 const SIGUSR1: i32 = 10;

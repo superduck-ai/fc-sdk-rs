@@ -2,7 +2,8 @@ use firecracker_sdk::{
     Config, DrivesBuilder, MachineConfiguration, VMCommandBuilder, new_machine, with_process_runner,
 };
 
-fn main() -> Result<(), firecracker_sdk::Error> {
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), firecracker_sdk::Error> {
     let socket_path = "/tmp/firecracker.sock";
     let command = VMCommandBuilder::default()
         .with_bin("firecracker")
@@ -22,8 +23,8 @@ fn main() -> Result<(), firecracker_sdk::Error> {
         [with_process_runner(command)],
     )?;
 
-    machine.start()?;
-    machine.wait()?;
+    machine.start().await?;
+    machine.wait().await?;
 
     Ok(())
 }

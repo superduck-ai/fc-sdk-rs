@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-use firecracker_sdk::{Client, Drive, FirecrackerVersion, wait_for_alive_vmm};
+use firecracker_sdk::{AsyncResultExt, Client, Drive, FirecrackerVersion, wait_for_alive_vmm};
 use serde_json::json;
 
 fn firecracker_binary() -> &'static str {

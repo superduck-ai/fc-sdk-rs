@@ -1,6 +1,7 @@
 use firecracker_sdk::{Config, DrivesBuilder, Machine, MachineConfiguration};
 
-fn main() -> Result<(), firecracker_sdk::Error> {
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), firecracker_sdk::Error> {
     let drives = DrivesBuilder::new("/path/to/rootfs")
         .add_drive("/first/path/drive.img", true, std::iter::empty())
         .add_drive("/second/path/drive.img", false, std::iter::empty())
@@ -14,8 +15,8 @@ fn main() -> Result<(), firecracker_sdk::Error> {
         ..Config::default()
     })?;
 
-    machine.start()?;
-    machine.wait()?;
+    machine.start().await?;
+    machine.wait().await?;
 
     Ok(())
 }

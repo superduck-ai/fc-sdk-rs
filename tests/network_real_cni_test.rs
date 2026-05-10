@@ -6,9 +6,9 @@ use std::path::{Path, PathBuf};
 
 use firecracker_sdk::fctesting::MockClient;
 use firecracker_sdk::{
-    CniConfiguration, CommandStdio, Config, Error, Handler, HandlerList, IPConfiguration, Machine,
-    MachineConfiguration, NetworkInterface, NetworkInterfaces, RealCniNetworkOperations,
-    RealNetlinkOps, VMCommandBuilder, with_client, with_process_runner,
+    AsyncResultExt, CniConfiguration, CommandStdio, Config, Error, Handler, HandlerList,
+    IPConfiguration, Machine, MachineConfiguration, NetworkInterface, NetworkInterfaces,
+    RealCniNetworkOperations, RealNetlinkOps, VMCommandBuilder, with_client, with_process_runner,
 };
 use ipnet::Ipv4Net;
 
@@ -354,7 +354,9 @@ fn test_machine_wait_runs_real_cni_cleanup() {
     machine.handlers.validation = HandlerList::default();
     machine.handlers.fc_init = HandlerList::default().append([
         Handler::new("setup_network", |machine| machine.setup_network()),
-        Handler::new("start_vmm", |machine| machine.start_vmm()),
+        Handler::new_async("start_vmm", |machine| {
+            Box::pin(async move { machine.start_vmm().await })
+        }),
     ]);
 
     machine.start().unwrap();

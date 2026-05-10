@@ -22,6 +22,11 @@ To create a snapshot, start the VM, pause it, then call
 ```rust,no_run
 use firecracker_sdk::{Config, Machine, MachineConfiguration};
 
+# tokio::runtime::Builder::new_current_thread()
+#     .enable_all()
+#     .build()
+#     .unwrap()
+#     .block_on(async {
 let mut machine = Machine::new(Config {
     socket_path: "/tmp/firecracker.sock".to_string(),
     kernel_image_path: "/path/to/kernel".to_string(),
@@ -29,10 +34,12 @@ let mut machine = Machine::new(Config {
     ..Config::default()
 })?;
 
-machine.start()?;
-machine.pause_vm()?;
-machine.create_snapshot("/tmp/vm.mem", "/tmp/vm.snap")?;
+machine.start().await?;
+machine.pause_vm().await?;
+machine.create_snapshot("/tmp/vm.mem", "/tmp/vm.snap").await?;
 # Ok::<(), firecracker_sdk::Error>(())
+#     })
+#     .unwrap();
 ```
 
 ## Loading a snapshot
@@ -46,6 +53,11 @@ use firecracker_sdk::{
     Config, MachineConfiguration, new_machine, with_memory_backend, with_snapshot,
 };
 
+# tokio::runtime::Builder::new_current_thread()
+#     .enable_all()
+#     .build()
+#     .unwrap()
+#     .block_on(async {
 let mut machine = new_machine(
     Config {
         socket_path: "/tmp/firecracker.sock".to_string(),
@@ -59,9 +71,11 @@ let mut machine = new_machine(
     )],
 )?;
 
-machine.start()?;
-machine.resume_vm()?;
+machine.start().await?;
+machine.resume_vm().await?;
 # Ok::<(), firecracker_sdk::Error>(())
+#     })
+#     .unwrap();
 ```
 
 ## Notes

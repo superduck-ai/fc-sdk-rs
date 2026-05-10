@@ -5,8 +5,8 @@ use firecracker_sdk::cni::internal::{Link, MockNetlinkOps};
 use firecracker_sdk::cni::{CniDnsConfig, CniInterface, CniIpConfig, CniResult};
 use firecracker_sdk::fctesting::MockClient;
 use firecracker_sdk::{
-    CleanupFn, CniConfiguration, CniNetworkOperations, CommandStdio, Config, Error, Handler,
-    HandlerList, MachineConfiguration, NetworkInterface, NetworkInterfaces,
+    AsyncResultExt, CleanupFn, CniConfiguration, CniNetworkOperations, CommandStdio, Config, Error,
+    Handler, HandlerList, MachineConfiguration, NetworkInterface, NetworkInterfaces,
     RealCniNetworkOperations, VMCommandBuilder, with_client, with_cni_network_ops,
     with_netlink_ops, with_process_runner,
 };
@@ -168,7 +168,9 @@ fn test_wait_runs_cleanup_once_in_reverse_order() {
     machine.handlers.validation = HandlerList::default();
     machine.handlers.fc_init = HandlerList::default().append([
         Handler::new("setup_network", |machine| machine.setup_network()),
-        Handler::new("start_vmm", |machine| machine.start_vmm()),
+        Handler::new_async("start_vmm", |machine| {
+            Box::pin(async move { machine.start_vmm().await })
+        }),
     ]);
 
     let real_netns_cleanups = RealCniNetworkOperations

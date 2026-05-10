@@ -1,7 +1,9 @@
+pub mod async_ext;
 pub mod firecracker_mock_client;
 pub mod test_writer;
 pub mod utils;
 
+pub use async_ext::{AsyncResultExt, BlockingFutureExt, block_on};
 pub use firecracker_mock_client::MockClient;
 pub use test_writer::TestWriter;
 pub use utils::{

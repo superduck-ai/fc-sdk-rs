@@ -1,3 +1,5 @@
+use async_trait::async_trait;
+
 use crate::client::ClientOps;
 use crate::error::Result;
 use crate::models::{
@@ -68,8 +70,9 @@ pub struct MockClient {
     pub get_export_vm_config_fn: Option<ExportVmConfigFn>,
 }
 
+#[async_trait]
 impl ClientOps for MockClient {
-    fn get_firecracker_version(&mut self) -> Result<FirecrackerVersion> {
+    async fn get_firecracker_version(&mut self) -> Result<FirecrackerVersion> {
         if let Some(f) = self.get_firecracker_version_fn.as_mut() {
             return f();
         }
@@ -78,77 +81,81 @@ impl ClientOps for MockClient {
         })
     }
 
-    fn put_logger(&mut self, logger: &Logger) -> Result<()> {
+    async fn put_logger(&mut self, logger: &Logger) -> Result<()> {
         if let Some(f) = self.put_logger_fn.as_mut() {
             return f(logger);
         }
         Ok(())
     }
 
-    fn put_metrics(&mut self, metrics: &Metrics) -> Result<()> {
+    async fn put_metrics(&mut self, metrics: &Metrics) -> Result<()> {
         if let Some(f) = self.put_metrics_fn.as_mut() {
             return f(metrics);
         }
         Ok(())
     }
 
-    fn put_machine_configuration(&mut self, config: &MachineConfiguration) -> Result<()> {
+    async fn put_machine_configuration(&mut self, config: &MachineConfiguration) -> Result<()> {
         if let Some(f) = self.put_machine_configuration_fn.as_mut() {
             return f(config);
         }
         Ok(())
     }
 
-    fn patch_machine_configuration(&mut self, config: &MachineConfiguration) -> Result<()> {
+    async fn patch_machine_configuration(&mut self, config: &MachineConfiguration) -> Result<()> {
         if let Some(f) = self.patch_machine_configuration_fn.as_mut() {
             return f(config);
         }
         Ok(())
     }
 
-    fn get_machine_configuration(&mut self) -> Result<MachineConfiguration> {
+    async fn get_machine_configuration(&mut self) -> Result<MachineConfiguration> {
         if let Some(f) = self.get_machine_configuration_fn.as_mut() {
             return f();
         }
         Ok(MachineConfiguration::default())
     }
 
-    fn put_guest_boot_source(&mut self, boot_source: &BootSource) -> Result<()> {
+    async fn put_guest_boot_source(&mut self, boot_source: &BootSource) -> Result<()> {
         if let Some(f) = self.put_guest_boot_source_fn.as_mut() {
             return f(boot_source);
         }
         Ok(())
     }
 
-    fn put_cpu_configuration(&mut self, config: &CpuConfig) -> Result<()> {
+    async fn put_cpu_configuration(&mut self, config: &CpuConfig) -> Result<()> {
         if let Some(f) = self.put_cpu_configuration_fn.as_mut() {
             return f(config);
         }
         Ok(())
     }
 
-    fn put_entropy_device(&mut self, device: &EntropyDevice) -> Result<()> {
+    async fn put_entropy_device(&mut self, device: &EntropyDevice) -> Result<()> {
         if let Some(f) = self.put_entropy_device_fn.as_mut() {
             return f(device);
         }
         Ok(())
     }
 
-    fn put_guest_drive_by_id(&mut self, drive_id: &str, drive: &Drive) -> Result<()> {
+    async fn put_guest_drive_by_id(&mut self, drive_id: &str, drive: &Drive) -> Result<()> {
         if let Some(f) = self.put_guest_drive_by_id_fn.as_mut() {
             return f(drive_id, drive);
         }
         Ok(())
     }
 
-    fn patch_guest_drive_by_id(&mut self, drive_id: &str, drive: &PartialDrive) -> Result<()> {
+    async fn patch_guest_drive_by_id(
+        &mut self,
+        drive_id: &str,
+        drive: &PartialDrive,
+    ) -> Result<()> {
         if let Some(f) = self.patch_guest_drive_by_id_fn.as_mut() {
             return f(drive_id, drive);
         }
         Ok(())
     }
 
-    fn put_guest_network_interface_by_id(
+    async fn put_guest_network_interface_by_id(
         &mut self,
         iface_id: &str,
         iface: &NetworkInterfaceModel,
@@ -159,7 +166,7 @@ impl ClientOps for MockClient {
         Ok(())
     }
 
-    fn patch_guest_network_interface_by_id(
+    async fn patch_guest_network_interface_by_id(
         &mut self,
         iface_id: &str,
         iface: &PartialNetworkInterface,
@@ -170,105 +177,105 @@ impl ClientOps for MockClient {
         Ok(())
     }
 
-    fn put_guest_vsock(&mut self, vsock: &VsockModel) -> Result<()> {
+    async fn put_guest_vsock(&mut self, vsock: &VsockModel) -> Result<()> {
         if let Some(f) = self.put_guest_vsock_fn.as_mut() {
             return f(vsock);
         }
         Ok(())
     }
 
-    fn patch_vm(&mut self, vm: &Vm) -> Result<()> {
+    async fn patch_vm(&mut self, vm: &Vm) -> Result<()> {
         if let Some(f) = self.patch_vm_fn.as_mut() {
             return f(vm);
         }
         Ok(())
     }
 
-    fn create_snapshot(&mut self, snapshot: &SnapshotCreateParams) -> Result<()> {
+    async fn create_snapshot(&mut self, snapshot: &SnapshotCreateParams) -> Result<()> {
         if let Some(f) = self.create_snapshot_fn.as_mut() {
             return f(snapshot);
         }
         Ok(())
     }
 
-    fn load_snapshot(&mut self, snapshot: &SnapshotLoadParams) -> Result<()> {
+    async fn load_snapshot(&mut self, snapshot: &SnapshotLoadParams) -> Result<()> {
         if let Some(f) = self.load_snapshot_fn.as_mut() {
             return f(snapshot);
         }
         Ok(())
     }
 
-    fn create_sync_action(&mut self, action: &InstanceActionInfo) -> Result<()> {
+    async fn create_sync_action(&mut self, action: &InstanceActionInfo) -> Result<()> {
         if let Some(f) = self.create_sync_action_fn.as_mut() {
             return f(action);
         }
         Ok(())
     }
 
-    fn put_mmds(&mut self, metadata: &serde_json::Value) -> Result<()> {
+    async fn put_mmds(&mut self, metadata: &serde_json::Value) -> Result<()> {
         if let Some(f) = self.put_mmds_fn.as_mut() {
             return f(metadata);
         }
         Ok(())
     }
 
-    fn get_mmds(&mut self) -> Result<serde_json::Value> {
+    async fn get_mmds(&mut self) -> Result<serde_json::Value> {
         if let Some(f) = self.get_mmds_fn.as_mut() {
             return f();
         }
         Ok(serde_json::json!({}))
     }
 
-    fn patch_mmds(&mut self, metadata: &serde_json::Value) -> Result<()> {
+    async fn patch_mmds(&mut self, metadata: &serde_json::Value) -> Result<()> {
         if let Some(f) = self.patch_mmds_fn.as_mut() {
             return f(metadata);
         }
         Ok(())
     }
 
-    fn put_mmds_config(&mut self, config: &MmdsConfig) -> Result<()> {
+    async fn put_mmds_config(&mut self, config: &MmdsConfig) -> Result<()> {
         if let Some(f) = self.put_mmds_config_fn.as_mut() {
             return f(config);
         }
         Ok(())
     }
 
-    fn describe_instance(&mut self) -> Result<InstanceInfo> {
+    async fn describe_instance(&mut self) -> Result<InstanceInfo> {
         if let Some(f) = self.describe_instance_fn.as_mut() {
             return f();
         }
         Ok(InstanceInfo::default())
     }
 
-    fn put_balloon(&mut self, balloon: &Balloon) -> Result<()> {
+    async fn put_balloon(&mut self, balloon: &Balloon) -> Result<()> {
         if let Some(f) = self.put_balloon_fn.as_mut() {
             return f(balloon);
         }
         Ok(())
     }
 
-    fn get_balloon_config(&mut self) -> Result<Balloon> {
+    async fn get_balloon_config(&mut self) -> Result<Balloon> {
         if let Some(f) = self.get_balloon_config_fn.as_mut() {
             return f();
         }
         Ok(Balloon::default())
     }
 
-    fn patch_balloon(&mut self, balloon_update: &BalloonUpdate) -> Result<()> {
+    async fn patch_balloon(&mut self, balloon_update: &BalloonUpdate) -> Result<()> {
         if let Some(f) = self.patch_balloon_fn.as_mut() {
             return f(balloon_update);
         }
         Ok(())
     }
 
-    fn get_balloon_stats(&mut self) -> Result<BalloonStats> {
+    async fn get_balloon_stats(&mut self) -> Result<BalloonStats> {
         if let Some(f) = self.get_balloon_stats_fn.as_mut() {
             return f();
         }
         Ok(BalloonStats::default())
     }
 
-    fn patch_balloon_stats_interval(
+    async fn patch_balloon_stats_interval(
         &mut self,
         balloon_stats_update: &BalloonStatsUpdate,
     ) -> Result<()> {
@@ -278,7 +285,7 @@ impl ClientOps for MockClient {
         Ok(())
     }
 
-    fn get_export_vm_config(&mut self) -> Result<FullVmConfiguration> {
+    async fn get_export_vm_config(&mut self) -> Result<FullVmConfiguration> {
         if let Some(f) = self.get_export_vm_config_fn.as_mut() {
             return f();
         }

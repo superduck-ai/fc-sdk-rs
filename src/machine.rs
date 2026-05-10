@@ -4,12 +4,12 @@ use std::ffi::{CString, c_char, c_void};
 use std::io::{Read, Write};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::fs::OpenOptionsExt;
-use std::os::unix::process::CommandExt;
-use std::process::{Child, Command, ExitStatus, Stdio};
+use std::process::{ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
+use tokio::process::{Child, Command};
 
 use crate::client::{Client, ClientOps, NoopClient};
 use crate::cni::internal::{NetlinkOps, RealNetlinkOps};
@@ -418,24 +418,24 @@ impl Machine {
         self.cfg.log_level.as_deref()
     }
 
-    pub fn start(&mut self) -> Result<()> {
+    pub async fn start(&mut self) -> Result<()> {
         if self.started {
             return Err(Error::AlreadyStarted);
         }
         self.started = true;
         let handlers = self.handlers.clone();
-        if let Err(error) = handlers.run(self) {
-            return Err(self.abort_start(error));
+        if let Err(error) = handlers.run(self).await {
+            return Err(self.abort_start(error).await);
         }
 
-        if let Err(error) = self.start_instance() {
-            return Err(self.abort_start(error));
+        if let Err(error) = self.start_instance().await {
+            return Err(self.abort_start(error).await);
         }
 
         Ok(())
     }
 
-    pub fn start_vmm(&mut self) -> Result<()> {
+    pub async fn start_vmm(&mut self) -> Result<()> {
         let command = self
             .command
             .clone()
@@ -464,7 +464,7 @@ impl Machine {
         }));
 
         if let Err(error) = self.install_signal_forwarder() {
-            return Err(self.abort_start(error));
+            return Err(self.abort_start(error).await);
         }
 
         let init_timeout_secs = env_value_or_default_int(
@@ -472,20 +472,22 @@ impl Machine {
             DEFAULT_FIRECRACKER_INIT_TIMEOUT_SECONDS as i32,
         ) as u64;
 
-        let wait_result = self.wait_for_vmm_ready(Duration::from_secs(init_timeout_secs));
+        let wait_result = self
+            .wait_for_vmm_ready(Duration::from_secs(init_timeout_secs))
+            .await;
 
         if let Err(error) = wait_result {
-            return Err(self.abort_start(error));
+            return Err(self.abort_start(error).await);
         }
 
         Ok(())
     }
 
-    pub fn stop_vmm(&mut self) -> Result<()> {
+    pub async fn stop_vmm(&mut self) -> Result<()> {
         let stop_result = self.send_sigterm_to_vmm();
 
         if stop_result.is_ok() && (self.process.is_some() || !self.cleanup_done) {
-            if let Err(error) = self.finalize_process_exit() {
+            if let Err(error) = self.finalize_process_exit().await {
                 self.remember_terminal_error(error);
             }
         }
@@ -493,9 +495,9 @@ impl Machine {
         stop_result
     }
 
-    pub fn wait(&mut self) -> Result<()> {
+    pub async fn wait(&mut self) -> Result<()> {
         if self.process.is_some() || !self.cleanup_done {
-            if let Err(error) = self.finalize_process_exit() {
+            if let Err(error) = self.finalize_process_exit().await {
                 self.remember_terminal_error(error);
             }
         }
@@ -511,7 +513,7 @@ impl Machine {
         let pid = self
             .process
             .as_ref()
-            .map(Child::id)
+            .and_then(Child::id)
             .ok_or_else(|| Error::Process("machine is not running".into()))?;
 
         let exited_status = if let Some(child) = self.process.as_mut() {
@@ -548,7 +550,11 @@ impl Machine {
             return Ok(());
         }
 
-        if unsafe { libc_kill(child.id() as i32, SIGTERM_SIGNAL) } != 0 {
+        let Some(pid) = child.id() else {
+            return Ok(());
+        };
+
+        if unsafe { libc_kill(pid as i32, SIGTERM_SIGNAL) } != 0 {
             let error = std::io::Error::last_os_error();
             if error.raw_os_error() != Some(ESRCH_ERRNO) {
                 return Err(error.into());
@@ -574,8 +580,8 @@ impl Machine {
         Ok(())
     }
 
-    fn finalize_process_exit(&mut self) -> Result<()> {
-        let wait_result = self.wait_for_process_exit();
+    async fn finalize_process_exit(&mut self) -> Result<()> {
+        let wait_result = self.wait_for_process_exit().await;
         self.finalize_exit_result(wait_result)
     }
 
@@ -589,9 +595,9 @@ impl Machine {
         }
     }
 
-    fn wait_for_process_exit(&mut self) -> Result<()> {
+    async fn wait_for_process_exit(&mut self) -> Result<()> {
         if let Some(mut child) = self.process.take() {
-            Self::exit_status_result(child.wait()?)
+            Self::exit_status_result(child.wait().await?)
         } else {
             Ok(())
         }
@@ -715,7 +721,7 @@ impl Machine {
         })
     }
 
-    fn wait_for_vmm_ready(&mut self, timeout: Duration) -> Result<()> {
+    async fn wait_for_vmm_ready(&mut self, timeout: Duration) -> Result<()> {
         let deadline = Instant::now() + timeout;
 
         loop {
@@ -732,8 +738,8 @@ impl Machine {
                 )));
             }
 
-            if std::fs::metadata(&self.cfg.socket_path).is_ok()
-                && self.client.get_machine_configuration().is_ok()
+            if tokio::fs::metadata(&self.cfg.socket_path).await.is_ok()
+                && self.client.get_machine_configuration().await.is_ok()
             {
                 return Ok(());
             }
@@ -746,7 +752,7 @@ impl Machine {
                 .into());
             }
 
-            thread::sleep(Duration::from_millis(10));
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
     }
 
@@ -805,16 +811,16 @@ impl Machine {
         }
     }
 
-    fn abort_start(&mut self, error: Error) -> Error {
+    async fn abort_start(&mut self, error: Error) -> Error {
         self.signal_exit();
 
         let stop_error = if self.process.is_some() {
-            self.stop_vmm().err()
+            self.stop_vmm().await.err()
         } else {
             None
         };
         self.shutdown_signal_forwarder();
-        let wait_error = self.wait_for_process_exit().err().map(Error::from);
+        let wait_error = self.wait_for_process_exit().await.err().map(Error::from);
         let cleanup_error = self.do_cleanup().err();
 
         let final_error = if stop_error.is_none() && wait_error.is_none() && cleanup_error.is_none()
@@ -852,7 +858,8 @@ impl Machine {
             .process
             .as_ref()
             .ok_or_else(|| Error::Process("machine is not running".into()))?
-            .id();
+            .id()
+            .ok_or_else(|| Error::Process("machine process has exited".into()))?;
 
         self.signal_forwarder = SignalForwarder::install(signals, child_pid)?;
 
@@ -865,17 +872,19 @@ impl Machine {
         }
     }
 
-    pub fn shutdown(&mut self) -> Result<()> {
+    pub async fn shutdown(&mut self) -> Result<()> {
         #[cfg(target_arch = "aarch64")]
         {
-            return self.stop_vmm();
+            return self.stop_vmm().await;
         }
 
         #[cfg(not(target_arch = "aarch64"))]
         {
-            self.client.create_sync_action(&InstanceActionInfo {
-                action_type: Some(crate::models::INSTANCE_ACTION_SEND_CTRL_ALT_DEL.to_string()),
-            })
+            self.client
+                .create_sync_action(&InstanceActionInfo {
+                    action_type: Some(crate::models::INSTANCE_ACTION_SEND_CTRL_ALT_DEL.to_string()),
+                })
+                .await
         }
     }
 
@@ -901,7 +910,7 @@ impl Machine {
         Ok(())
     }
 
-    pub fn wait_for_socket(
+    pub async fn wait_for_socket(
         &mut self,
         timeout: Duration,
         exitchan: &mpsc::Receiver<Error>,
@@ -914,8 +923,8 @@ impl Machine {
                 Err(mpsc::TryRecvError::Disconnected) | Err(mpsc::TryRecvError::Empty) => {}
             }
 
-            if std::fs::metadata(&self.cfg.socket_path).is_ok()
-                && self.client.get_machine_configuration().is_ok()
+            if tokio::fs::metadata(&self.cfg.socket_path).await.is_ok()
+                && self.client.get_machine_configuration().await.is_ok()
             {
                 return Ok(());
             }
@@ -928,7 +937,7 @@ impl Machine {
                 .into());
             }
 
-            thread::sleep(Duration::from_millis(10));
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
     }
 
@@ -947,7 +956,7 @@ impl Machine {
         Ok(())
     }
 
-    pub fn setup_logging(&mut self) -> Result<()> {
+    pub async fn setup_logging(&mut self) -> Result<()> {
         let path = self
             .cfg
             .log_fifo
@@ -964,10 +973,10 @@ impl Machine {
             show_level: Some(true),
             show_log_origin: Some(false),
         };
-        self.client.put_logger(&logger)
+        self.client.put_logger(&logger).await
     }
 
-    pub fn setup_metrics(&mut self) -> Result<()> {
+    pub async fn setup_metrics(&mut self) -> Result<()> {
         let path = self
             .cfg
             .metrics_fifo
@@ -978,9 +987,11 @@ impl Machine {
             return Ok(());
         };
 
-        self.client.put_metrics(&Metrics {
-            metrics_path: Some(path),
-        })
+        self.client
+            .put_metrics(&Metrics {
+                metrics_path: Some(path),
+            })
+            .await
     }
 
     pub fn capture_fifo_to_file<W>(&self, fifo_path: &str, writer: W) -> Result<()>
@@ -1063,31 +1074,34 @@ impl Machine {
         Ok(())
     }
 
-    pub fn refresh_machine_configuration(&mut self) -> Result<()> {
-        self.machine_config = self.client.get_machine_configuration()?;
+    pub async fn refresh_machine_configuration(&mut self) -> Result<()> {
+        self.machine_config = self.client.get_machine_configuration().await?;
         Ok(())
     }
 
-    pub fn create_machine(&mut self) -> Result<()> {
+    pub async fn create_machine(&mut self) -> Result<()> {
         self.client
-            .put_machine_configuration(&self.cfg.machine_cfg)?;
-        self.refresh_machine_configuration()
+            .put_machine_configuration(&self.cfg.machine_cfg)
+            .await?;
+        self.refresh_machine_configuration().await
     }
 
-    pub fn create_boot_source(
+    pub async fn create_boot_source(
         &mut self,
         image_path: &str,
         initrd_path: Option<&str>,
         kernel_args: Option<&str>,
     ) -> Result<()> {
-        self.client.put_guest_boot_source(&BootSource {
-            kernel_image_path: Some(image_path.to_string()),
-            initrd_path: initrd_path.map(ToOwned::to_owned),
-            boot_args: kernel_args.map(ToOwned::to_owned),
-        })
+        self.client
+            .put_guest_boot_source(&BootSource {
+                kernel_image_path: Some(image_path.to_string()),
+                initrd_path: initrd_path.map(ToOwned::to_owned),
+                boot_args: kernel_args.map(ToOwned::to_owned),
+            })
+            .await
     }
 
-    pub fn create_network_interface(
+    pub async fn create_network_interface(
         &mut self,
         iface: &NetworkInterface,
         index: usize,
@@ -1096,67 +1110,71 @@ impl Machine {
             Error::InvalidConfig("invalid nil state for network interface".into())
         })?;
         let iface_id = index.to_string();
-        self.client.put_guest_network_interface_by_id(
-            &iface_id,
-            &NetworkInterfaceModel {
-                iface_id: Some(iface_id.clone()),
-                guest_mac: static_config.mac_address.clone(),
-                host_dev_name: Some(static_config.host_dev_name.clone()),
-                rx_rate_limiter: iface.in_rate_limiter.clone(),
-                tx_rate_limiter: iface.out_rate_limiter.clone(),
-            },
-        )
+        self.client
+            .put_guest_network_interface_by_id(
+                &iface_id,
+                &NetworkInterfaceModel {
+                    iface_id: Some(iface_id.clone()),
+                    guest_mac: static_config.mac_address.clone(),
+                    host_dev_name: Some(static_config.host_dev_name.clone()),
+                    rx_rate_limiter: iface.in_rate_limiter.clone(),
+                    tx_rate_limiter: iface.out_rate_limiter.clone(),
+                },
+            )
+            .await
     }
 
-    pub fn create_network_interfaces(&mut self) -> Result<()> {
+    pub async fn create_network_interfaces(&mut self) -> Result<()> {
         let interfaces = self.cfg.network_interfaces.clone();
         for (index, iface) in interfaces.iter().cloned().enumerate() {
-            self.create_network_interface(&iface, index + 1)?;
+            self.create_network_interface(&iface, index + 1).await?;
         }
         Ok(())
     }
 
-    pub fn attach_drive(&mut self, drive: &crate::models::Drive) -> Result<()> {
+    pub async fn attach_drive(&mut self, drive: &crate::models::Drive) -> Result<()> {
         let drive_id = drive.drive_id.as_deref().unwrap_or_default().to_string();
-        self.client.put_guest_drive_by_id(&drive_id, drive)
+        self.client.put_guest_drive_by_id(&drive_id, drive).await
     }
 
-    pub fn attach_drives(&mut self) -> Result<()> {
+    pub async fn attach_drives(&mut self) -> Result<()> {
         for drive in self.cfg.drives.clone() {
-            self.attach_drive(&drive)?;
+            self.attach_drive(&drive).await?;
         }
         Ok(())
     }
 
-    pub fn add_vsock(&mut self, device: &crate::vsock::VsockDevice) -> Result<()> {
-        self.client.put_guest_vsock(&VsockModel {
-            vsock_id: Some(device.id.clone()),
-            guest_cid: Some(device.cid as i64),
-            uds_path: Some(device.path.clone()),
-        })
+    pub async fn add_vsock(&mut self, device: &crate::vsock::VsockDevice) -> Result<()> {
+        self.client
+            .put_guest_vsock(&VsockModel {
+                vsock_id: Some(device.id.clone()),
+                guest_cid: Some(device.cid as i64),
+                uds_path: Some(device.path.clone()),
+            })
+            .await
     }
 
-    pub fn add_vsocks(&mut self) -> Result<()> {
+    pub async fn add_vsocks(&mut self) -> Result<()> {
         for device in self.cfg.vsock_devices.clone() {
-            self.add_vsock(&device)?;
+            self.add_vsock(&device).await?;
         }
         Ok(())
     }
 
-    pub fn set_metadata(&mut self, metadata: &serde_json::Value) -> Result<()> {
-        self.client.put_mmds(metadata)
+    pub async fn set_metadata(&mut self, metadata: &serde_json::Value) -> Result<()> {
+        self.client.put_mmds(metadata).await
     }
 
-    pub fn update_metadata(&mut self, metadata: &serde_json::Value) -> Result<()> {
-        self.client.patch_mmds(metadata)
+    pub async fn update_metadata(&mut self, metadata: &serde_json::Value) -> Result<()> {
+        self.client.patch_mmds(metadata).await
     }
 
-    pub fn get_metadata<T: DeserializeOwned>(&mut self) -> Result<T> {
-        let value = self.client.get_mmds()?;
+    pub async fn get_metadata<T: DeserializeOwned>(&mut self) -> Result<T> {
+        let value = self.client.get_mmds().await?;
         Ok(serde_json::from_value(value)?)
     }
 
-    pub fn set_mmds_config(
+    pub async fn set_mmds_config(
         &mut self,
         address: Option<std::net::Ipv4Addr>,
         ifaces: &NetworkInterfaces,
@@ -1172,120 +1190,145 @@ impl Machine {
             return Ok(());
         }
 
-        self.client.put_mmds_config(&MmdsConfig {
-            ipv4_address: address.map(|address| address.to_string()),
-            network_interfaces,
-            version: Some(match version {
-                MMDSVersion::V1 => crate::models::MMDS_VERSION_V1.to_string(),
-                MMDSVersion::V2 => crate::models::MMDS_VERSION_V2.to_string(),
-            }),
-        })
+        self.client
+            .put_mmds_config(&MmdsConfig {
+                ipv4_address: address.map(|address| address.to_string()),
+                network_interfaces,
+                version: Some(match version {
+                    MMDSVersion::V1 => crate::models::MMDS_VERSION_V1.to_string(),
+                    MMDSVersion::V2 => crate::models::MMDS_VERSION_V2.to_string(),
+                }),
+            })
+            .await
     }
 
-    pub fn get_firecracker_version(&mut self) -> Result<String> {
-        Ok(self.client.get_firecracker_version()?.firecracker_version)
+    pub async fn get_firecracker_version(&mut self) -> Result<String> {
+        Ok(self
+            .client
+            .get_firecracker_version()
+            .await?
+            .firecracker_version)
     }
 
-    pub fn describe_instance_info(&mut self) -> Result<InstanceInfo> {
-        self.client.describe_instance()
+    pub async fn describe_instance_info(&mut self) -> Result<InstanceInfo> {
+        self.client.describe_instance().await
     }
 
-    pub fn update_guest_drive(&mut self, drive_id: &str, path_on_host: &str) -> Result<()> {
-        self.client.patch_guest_drive_by_id(
-            drive_id,
-            &PartialDrive {
-                drive_id: Some(drive_id.to_string()),
-                path_on_host: Some(path_on_host.to_string()),
-            },
-        )
+    pub async fn update_guest_drive(&mut self, drive_id: &str, path_on_host: &str) -> Result<()> {
+        self.client
+            .patch_guest_drive_by_id(
+                drive_id,
+                &PartialDrive {
+                    drive_id: Some(drive_id.to_string()),
+                    path_on_host: Some(path_on_host.to_string()),
+                },
+            )
+            .await
     }
 
-    pub fn update_guest_network_interface_rate_limit(
+    pub async fn update_guest_network_interface_rate_limit(
         &mut self,
         iface_id: &str,
         rate_limiters: RateLimiterSet,
     ) -> Result<()> {
-        self.client.patch_guest_network_interface_by_id(
-            iface_id,
-            &PartialNetworkInterface {
-                iface_id: Some(iface_id.to_string()),
-                rx_rate_limiter: rate_limiters.in_rate_limiter,
-                tx_rate_limiter: rate_limiters.out_rate_limiter,
-            },
-        )
+        self.client
+            .patch_guest_network_interface_by_id(
+                iface_id,
+                &PartialNetworkInterface {
+                    iface_id: Some(iface_id.to_string()),
+                    rx_rate_limiter: rate_limiters.in_rate_limiter,
+                    tx_rate_limiter: rate_limiters.out_rate_limiter,
+                },
+            )
+            .await
     }
 
-    pub fn pause_vm(&mut self) -> Result<()> {
-        self.client.patch_vm(&Vm::paused())
+    pub async fn pause_vm(&mut self) -> Result<()> {
+        self.client.patch_vm(&Vm::paused()).await
     }
 
-    pub fn resume_vm(&mut self) -> Result<()> {
-        self.client.patch_vm(&Vm::resumed())
+    pub async fn resume_vm(&mut self) -> Result<()> {
+        self.client.patch_vm(&Vm::resumed()).await
     }
 
-    pub fn create_snapshot(&mut self, mem_file_path: &str, snapshot_path: &str) -> Result<()> {
-        self.client.create_snapshot(&SnapshotCreateParams {
-            mem_file_path: Some(mem_file_path.to_string()),
-            snapshot_path: Some(snapshot_path.to_string()),
-        })
+    pub async fn create_snapshot(
+        &mut self,
+        mem_file_path: &str,
+        snapshot_path: &str,
+    ) -> Result<()> {
+        self.client
+            .create_snapshot(&SnapshotCreateParams {
+                mem_file_path: Some(mem_file_path.to_string()),
+                snapshot_path: Some(snapshot_path.to_string()),
+            })
+            .await
     }
 
-    pub fn load_snapshot(&mut self) -> Result<()> {
+    pub async fn load_snapshot(&mut self) -> Result<()> {
         let snapshot = &self.cfg.snapshot;
-        self.client.load_snapshot(&SnapshotLoadParams {
-            mem_file_path: snapshot.mem_file_path.clone(),
-            mem_backend: snapshot.mem_backend.clone(),
-            snapshot_path: snapshot.snapshot_path.clone(),
-            enable_diff_snapshots: snapshot.enable_diff_snapshots,
-            resume_vm: snapshot.resume_vm,
-        })
+        self.client
+            .load_snapshot(&SnapshotLoadParams {
+                mem_file_path: snapshot.mem_file_path.clone(),
+                mem_backend: snapshot.mem_backend.clone(),
+                snapshot_path: snapshot.snapshot_path.clone(),
+                enable_diff_snapshots: snapshot.enable_diff_snapshots,
+                resume_vm: snapshot.resume_vm,
+            })
+            .await
     }
 
-    pub fn create_balloon(
+    pub async fn create_balloon(
         &mut self,
         amount_mib: i64,
         deflate_on_oom: bool,
         stats_polling_intervals: i64,
     ) -> Result<()> {
-        self.client.put_balloon(&Balloon {
-            amount_mib: Some(amount_mib),
-            deflate_on_oom: Some(deflate_on_oom),
-            stats_polling_intervals,
-        })
+        self.client
+            .put_balloon(&Balloon {
+                amount_mib: Some(amount_mib),
+                deflate_on_oom: Some(deflate_on_oom),
+                stats_polling_intervals,
+            })
+            .await
     }
 
-    pub fn get_balloon_config(&mut self) -> Result<Balloon> {
-        self.client.get_balloon_config()
+    pub async fn get_balloon_config(&mut self) -> Result<Balloon> {
+        self.client.get_balloon_config().await
     }
 
-    pub fn update_balloon(&mut self, amount_mib: i64) -> Result<()> {
-        self.client.patch_balloon(&BalloonUpdate {
-            amount_mib: Some(amount_mib),
-        })
+    pub async fn update_balloon(&mut self, amount_mib: i64) -> Result<()> {
+        self.client
+            .patch_balloon(&BalloonUpdate {
+                amount_mib: Some(amount_mib),
+            })
+            .await
     }
 
-    pub fn get_balloon_stats(&mut self) -> Result<BalloonStats> {
-        self.client.get_balloon_stats()
+    pub async fn get_balloon_stats(&mut self) -> Result<BalloonStats> {
+        self.client.get_balloon_stats().await
     }
 
-    pub fn update_balloon_stats(&mut self, stats_polling_intervals: i64) -> Result<()> {
+    pub async fn update_balloon_stats(&mut self, stats_polling_intervals: i64) -> Result<()> {
         self.client
             .patch_balloon_stats_interval(&BalloonStatsUpdate {
                 stats_polling_intervals: Some(stats_polling_intervals),
             })
+            .await
     }
 
-    pub fn get_export_vm_config(&mut self) -> Result<FullVmConfiguration> {
-        self.client.get_export_vm_config()
+    pub async fn get_export_vm_config(&mut self) -> Result<FullVmConfiguration> {
+        self.client.get_export_vm_config().await
     }
 
-    fn start_instance(&mut self) -> Result<()> {
+    async fn start_instance(&mut self) -> Result<()> {
         if self.cfg.has_snapshot() {
             return Ok(());
         }
 
-        self.client.create_sync_action(&InstanceActionInfo {
-            action_type: Some(crate::models::INSTANCE_ACTION_INSTANCE_START.to_string()),
-        })
+        self.client
+            .create_sync_action(&InstanceActionInfo {
+                action_type: Some(crate::models::INSTANCE_ACTION_INSTANCE_START.to_string()),
+            })
+            .await
     }
 }

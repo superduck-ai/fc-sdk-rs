@@ -5,7 +5,8 @@ use firecracker_sdk::{
     with_rate_limiter,
 };
 
-fn main() -> Result<(), firecracker_sdk::Error> {
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), firecracker_sdk::Error> {
     let limiter = new_rate_limiter(
         TokenBucketBuilder::default()
             .with_initial_size(1024 * 1024)
@@ -29,8 +30,8 @@ fn main() -> Result<(), firecracker_sdk::Error> {
         ..Config::default()
     })?;
 
-    machine.start()?;
-    machine.wait()?;
+    machine.start().await?;
+    machine.wait().await?;
 
     Ok(())
 }

@@ -1,5 +1,7 @@
 use firecracker_sdk::fctesting::MockClient;
-use firecracker_sdk::{ClientOps, EntropyDevice, MachineConfiguration, RateLimiter, TokenBucket};
+use firecracker_sdk::{
+    AsyncResultExt, ClientOps, EntropyDevice, MachineConfiguration, RateLimiter, TokenBucket,
+};
 use serde_json::json;
 
 #[test]

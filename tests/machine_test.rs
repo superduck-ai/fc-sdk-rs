@@ -14,13 +14,14 @@ use std::time::{Duration, Instant};
 
 use firecracker_sdk::fctesting::{MockClient, TestWriter};
 use firecracker_sdk::{
-    Balloon, BalloonStats, CniNetworkOperations, CommandStdio, Config, DEFAULT_FORWARD_SIGNALS,
-    FIRECRACKER_INIT_TIMEOUT_ENV, FifoLogWriter, FirecrackerVersion, FullVmConfiguration,
-    HandlerList, INSTANCE_ACTION_INSTANCE_START, IPConfiguration, InstanceInfo, JailerConfig,
-    Machine, MachineConfiguration, NaiveChrootStrategy, NetworkInterface, NetworkInterfaces,
-    PartialDrive, RateLimiter, RateLimiterSet, RealCniNetworkOperations, SnapshotConfig,
-    StaticNetworkConfiguration, VM_STATE_PAUSED, VM_STATE_RESUMED, VMCommandBuilder, new_machine,
-    with_client, with_logger, with_process_runner, with_snapshot,
+    AsyncResultExt, Balloon, BalloonStats, BlockingFutureExt, CniNetworkOperations, CommandStdio,
+    Config, DEFAULT_FORWARD_SIGNALS, FIRECRACKER_INIT_TIMEOUT_ENV, FifoLogWriter,
+    FirecrackerVersion, FullVmConfiguration, HandlerList, INSTANCE_ACTION_INSTANCE_START,
+    IPConfiguration, InstanceInfo, JailerConfig, Machine, MachineConfiguration,
+    NaiveChrootStrategy, NetworkInterface, NetworkInterfaces, PartialDrive, RateLimiter,
+    RateLimiterSet, RealCniNetworkOperations, SnapshotConfig, StaticNetworkConfiguration,
+    VM_STATE_PAUSED, VM_STATE_RESUMED, VMCommandBuilder, new_machine, with_client, with_logger,
+    with_process_runner, with_snapshot,
 };
 use ipnet::Ipv4Net;
 
@@ -294,7 +295,7 @@ fn TestStartVMMOnce() {
 
     machine.start().unwrap();
     assert!(matches!(
-        machine.start(),
+        machine.start().block_on(),
         Err(firecracker_sdk::Error::AlreadyStarted)
     ));
 }
@@ -431,7 +432,9 @@ fn TestWaitWithNoSocket() {
         [
             with_client(Box::new(MockClient {
                 get_machine_configuration_fn: Some(Box::new(|| {
-                    Err(firecracker_sdk::Error::Process("socket not ready".to_string()))
+                    Err(firecracker_sdk::Error::Process(
+                        "socket not ready".to_string(),
+                    ))
                 })),
                 ..MockClient::default()
             })),
@@ -640,7 +643,10 @@ fn TestLoadSnapshot() {
                     mem_path.display().to_string(),
                 )],
             ),
-            with_process_runner(make_real_vm_command(&restore_socket_path, "snapshot-restore")),
+            with_process_runner(make_real_vm_command(
+                &restore_socket_path,
+                "snapshot-restore",
+            )),
         ],
     )
     .unwrap();
